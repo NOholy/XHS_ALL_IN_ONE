@@ -66,6 +66,93 @@ def _deep_snake_case(obj: Any, *, _depth: int = 0) -> Any:
     return obj
 
 
+import concurrent.futures
+import queue
+import threading
+
+_DAEMON_POOL: dict[str, XhsBrowserDaemon] = {}
+_DAEMON_LOCK = threading.Lock()
+
+class XhsBrowserDaemon:
+    """A persistent background browser worker with a task queue."""
+    def __init__(self, cookies: dict[str, str]):
+        self.cookies = cookies
+        self.task_queue = queue.Queue()
+        self.thread = None
+        self._start_thread()
+
+    def _start_thread(self):
+        self.thread = threading.Thread(target=self._run_loop, daemon=True)
+        self.thread.start()
+
+    def _run_loop(self):
+        from xhs_cli.client import XhsClient
+        client = None
+        try:
+            client = XhsClient(self.cookies)
+            client.start()
+            while True:
+                try:
+                    # 10 minutes idle timeout to free up memory
+                    item = self.task_queue.get(timeout=600)
+                except queue.Empty:
+                    logger.info("Browser daemon idle for 10 minutes, shutting down to save memory.")
+                    break
+                    
+                if item is None:
+                    break
+                    
+                task, future = item
+                try:
+                    result = task(client)
+                    if not future.cancelled():
+                        future.set_result(result)
+                except Exception as e:
+                    if not future.cancelled():
+                        future.set_exception(e)
+                        
+                    # Auto-healing: If the underlying playwright browser crashed, break the loop.
+                    # The thread will die and the next submit() will automatically respawn it.
+                    err_str = str(e)
+                    if "Target closed" in err_str or "Browser closed" in err_str or "Connection closed" in err_str:
+                        logger.error("Fatal browser disconnection detected, killing daemon thread for auto-restart.")
+                        break
+                finally:
+                    self.task_queue.task_done()
+        except Exception as e:
+            logger.error("Browser daemon crashed: %s", e)
+            while not self.task_queue.empty():
+                try:
+                    task, future = self.task_queue.get_nowait()
+                    if not future.cancelled():
+                        future.set_exception(e)
+                except queue.Empty:
+                    break
+        finally:
+            if client:
+                try:
+                    client.close()
+                except Exception:
+                    pass
+
+    def submit(self, task) -> concurrent.futures.Future:
+        if not self.thread or not self.thread.is_alive():
+            logger.info("Restarting browser daemon")
+            self._start_thread()
+            
+        f = concurrent.futures.Future()
+        self.task_queue.put((task, f))
+        return f
+
+def get_browser_daemon(cookies_str: str, parsed_cookies: dict[str, str]) -> XhsBrowserDaemon:
+    import hashlib
+    cookie_hash = hashlib.md5(cookies_str.encode()).hexdigest()
+    with _DAEMON_LOCK:
+        if cookie_hash not in _DAEMON_POOL:
+            _DAEMON_POOL[cookie_hash] = XhsBrowserDaemon(parsed_cookies)
+        return _DAEMON_POOL[cookie_hash]
+
+
 class CliXhsPcApiAdapter:
     """通过 xhs-cli 浏览器自动化实现的 PC 端读操作适配器。
 
@@ -74,6 +161,8 @@ class CliXhsPcApiAdapter:
 
     关键设计：所有从 xhs-cli 返回的数据在离开适配器前都会经过
     _deep_snake_case() 递归转换，确保下游代码只需处理 snake_case 键名。
+    
+    采用常驻浏览器线程池 (XhsBrowserDaemon) 实现 0 秒冷启动和异步削峰。
     """
 
     def __init__(self, cookies: str) -> None:
@@ -115,10 +204,13 @@ class CliXhsPcApiAdapter:
         geo: str = "",
     ) -> tuple[bool, str, Any]:
         try:
-            from xhs_cli.client import XhsClient
-
-            with XhsClient(self.cookie_dict) as client:
-                results = client.search_notes(keyword)
+            def _task(client):
+                return client.search_notes(keyword)
+                
+            daemon = get_browser_daemon(self.cookies_str, self.cookie_dict)
+            future = daemon.submit(_task)
+            results = future.result(timeout=60)
+            
             # Convert camelCase → snake_case at the boundary
             results = _deep_snake_case(results)
             payload = {
@@ -149,8 +241,13 @@ class CliXhsPcApiAdapter:
             if token_match:
                 xsec_token = token_match.group(1)
 
-            with XhsClient(self.cookie_dict) as client:
-                detail = client.get_note_detail(note_id, xsec_token=xsec_token)
+            def _task(client):
+                return client.get_note_detail(note_id, xsec_token=xsec_token)
+                
+            daemon = get_browser_daemon(self.cookies_str, self.cookie_dict)
+            future = daemon.submit(_task)
+            detail = future.result(timeout=60)
+            
             # Convert camelCase → snake_case at the boundary
             detail = _deep_snake_case(detail)
             payload = {"data": {"items": [detail]}}
@@ -199,15 +296,23 @@ class CliXhsPcApiAdapter:
             if token_match:
                 xsec_token = token_match.group(1)
 
-            with XhsClient(self.cookie_dict) as client:
-                # get_note_comments requires being on the note page first
+            def _task(client):
+                # Request 1 scroll for manual UI browsing to ensure fast loading (<3s)
                 client.get_note_detail(note_id, xsec_token=xsec_token)
-                comments = client.get_note_comments(note_id, xsec_token=xsec_token)
-
+                return client.scroll_and_read_comments(scroll_batches=1)
+                
+            daemon = get_browser_daemon(self.cookies_str, self.cookie_dict)
+            future = daemon.submit(_task)
+            comments = future.result(timeout=120)
+            
             # Convert camelCase → snake_case at the boundary
             comments = _deep_snake_case(comments)
-            # Wrap into the format expected by normalize_comment_payload
-            payload = {"data": {"comments": comments if isinstance(comments, list) else []}}
+            payload = {
+                "data": {
+                    "comments": comments if isinstance(comments, list) else [],
+                    "has_more": False,
+                }
+            }
             return True, "success", payload
         except Exception as e:
             logger.warning(
@@ -245,8 +350,13 @@ class CliXhsPcApiAdapter:
             if token_match:
                 xsec_token = token_match.group(1)
 
-            with XhsClient(self.cookie_dict) as client:
-                success = client.post_comment(note_id, content, xsec_token=xsec_token)
+            def _task(client):
+                return client.post_comment(note_id, content, xsec_token=xsec_token)
+                
+            daemon = get_browser_daemon(self.cookies_str, self.cookie_dict)
+            future = daemon.submit(_task)
+            success = future.result(timeout=60)
+            
             return success, "success" if success else "failed", None
         except Exception as e:
             logger.error("CliXhsPcApiAdapter.post_comment failed: %s", e)
@@ -265,8 +375,13 @@ class CliXhsPcApiAdapter:
             if token_match:
                 xsec_token = token_match.group(1)
 
-            with XhsClient(self.cookie_dict) as client:
-                success = client.reply_comment(note_id, comment_id, content, xsec_token=xsec_token)
+            def _task(client):
+                return client.reply_comment(note_id, comment_id, content, xsec_token=xsec_token)
+                
+            daemon = get_browser_daemon(self.cookies_str, self.cookie_dict)
+            future = daemon.submit(_task)
+            success = future.result(timeout=60)
+
             return success, "success" if success else "failed", None
         except Exception as e:
             logger.error("CliXhsPcApiAdapter.reply_comment failed: %s", e)

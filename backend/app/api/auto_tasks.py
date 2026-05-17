@@ -449,48 +449,59 @@ def run_auto_task(
     if auto_task.enable_auto_comment or auto_task.enable_auto_reply:
         import time
         try:
-            # Force CLI adapter for interaction to avoid bans
-            from backend.app.adapters.xhs.cli_pc_api_adapter import CliXhsPcApiAdapter
-            cli_adapter = CliXhsPcApiAdapter(pc_cookies)
+            from xhs_cli.client import XhsClient
+            from backend.app.adapters.xhs.cli_pc_api_adapter import CliXhsPcApiAdapter, _deep_snake_case
+            import logging
             
-            note_url = best_note.get("note_url") or f"https://www.xiaohongshu.com/explore/{best_note.get('note_id')}?xsec_token={best_note.get('xsec_token', '')}"
-            if note_url:
-                success, msg, comments_payload = cli_adapter.get_note_comments(note_url)
-                if success and comments_payload and "data" in comments_payload:
-                    comments = comments_payload["data"].get("comments", [])
+            cookie_dict = CliXhsPcApiAdapter._parse_cookies(pc_cookies)
+            note_id = best_note.get("note_id")
+            
+            if note_id:
+                with XhsClient(cookie_dict) as pipeline:
+                    # 1. 尝试从搜索页拟人化进入
+                    pipeline.search_notes(keyword)
+                    try:
+                        pipeline.click_into_note_card(note_id)
+                    except Exception:
+                        logging.getLogger(__name__).warning("Card not found on search page, falling back to direct note URL navigation")
+                        xsec_token = best_note.get("xsec_token", "")
+                        note_url = f"https://www.xiaohongshu.com/explore/{note_id}?xsec_token={xsec_token}&xsec_source=pc_feed"
+                        pipeline._goto(note_url)
+                        
+                    # 2. 模拟阅读并收集评论
+                    raw_comments = pipeline.scroll_and_read_comments(scroll_batches=3)
+                    comments = _deep_snake_case(raw_comments)
                     
                     target_comment = None
                     if auto_task.enable_auto_reply and comments:
-                        # Find a high-engagement comment
+                        # 挑选高赞评论
                         valid_comments = [c for c in comments if isinstance(c, dict) and c.get("like_count", 0) > 2]
                         if valid_comments:
                             target_comment = max(valid_comments, key=lambda x: x.get("like_count", 0))
                             
+                    # 3. 执行互动
                     if target_comment and auto_task.enable_auto_reply:
-                        # Reply strategy
                         time.sleep(random.uniform(2, 5))
                         template = random.choice(auto_task.reply_templates) if auto_task.reply_templates else "说的对，我也是这么觉得的。"
                         prompt = f"笔记标题：{draft.title}\n目标评论：{target_comment.get('content')}\n选定模版：{template}\n请针对目标评论，结合选定模版进行改写回复：{auto_task.reply_instruction}"
                         generated_reply = text_client._complete(
                             model_config=model_config, api_key=api_key, system_prompt="你是小红书内容互动编辑。", user_prompt=prompt, temperature=0.8
                         )
-                        c_id = target_comment.get("id") or target_comment.get("comment_id")
-                        if c_id:
-                            r_success, r_msg, _ = cli_adapter.reply_comment(note_url, c_id, generated_reply)
-                            if r_success:
-                                auto_task.total_replies = (auto_task.total_replies or 0) + 1
-                                interaction_result = "reply_success"
+                        
+                        target_text = target_comment.get("content", "")
+                        if target_text and pipeline.reply_to_target_comment(target_text, generated_reply, note_id=note_id):
+                            auto_task.total_replies = (auto_task.total_replies or 0) + 1
+                            interaction_result = "reply_success"
                             
                     elif auto_task.enable_auto_comment:
-                        # Comment strategy
                         time.sleep(random.uniform(2, 5))
                         template = random.choice(auto_task.comment_templates) if auto_task.comment_templates else "太赞了，学到了！"
                         prompt = f"笔记标题：{draft.title}\n笔记正文：{draft.body}\n选定模版：{template}\n请根据笔记内容对选定模版进行改写，使之符合当前语境：{auto_task.comment_instruction}"
                         generated_comment = text_client._complete(
                             model_config=model_config, api_key=api_key, system_prompt="你是小红书内容互动编辑。", user_prompt=prompt, temperature=0.8
                         )
-                        c_success, c_msg, _ = cli_adapter.post_comment(note_url, generated_comment)
-                        if c_success:
+                        
+                        if pipeline.post_comment(note_id, generated_comment):
                             auto_task.total_comments = (auto_task.total_comments or 0) + 1
                             interaction_result = "comment_success"
                             
