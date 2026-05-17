@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     app_name: str = "Spider_XHS"
     api_title: str = "Spider_XHS Operations Platform"
     environment: str = "development"
+    xhs_read_client_type: str = "cli"      # 读操作: "cli" (浏览器模拟) or "direct" (HTTP 直连)
+    xhs_write_client_type: str = "direct"  # 写操作: "direct" (HTTP 直连) or "cli" (浏览器自动化)
 
     # Database
     database_url: str = ""

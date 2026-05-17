@@ -49,14 +49,15 @@ def _first_present(*values: Any) -> Any:
 
 def enrich_user_info_with_xhs_self_profile(user_info: dict[str, Any], response: dict[str, Any]) -> dict[str, Any]:
     data = response.get("data") if isinstance(response, dict) else {}
-    if not isinstance(data, dict):
-        return user_info
-    basic_info = data.get("basic_info")
+    if not data and isinstance(response, dict):
+        data = response
+
+    basic_info = data.get("basic_info") or data.get("user_info")
     if not isinstance(basic_info, dict):
-        basic_info = {}
+        basic_info = data if data.get("red_id") or data.get("nickname") else {}
 
     interaction_counts: dict[str, Any] = {}
-    interactions = data.get("interactions")
+    interactions = data.get("interactions") or data.get("interaction_info")
     if isinstance(interactions, list):
         for item in interactions:
             if not isinstance(item, dict):
@@ -64,6 +65,10 @@ def enrich_user_info_with_xhs_self_profile(user_info: dict[str, Any], response: 
             interaction_type = item.get("type")
             if interaction_type:
                 interaction_counts[str(interaction_type)] = _first_present(item.get("i18n_count"), item.get("count"))
+    elif isinstance(interactions, dict):
+        interaction_counts["fans"] = _first_present(interactions.get("fans"), interactions.get("fans_count"))
+        interaction_counts["follows"] = _first_present(interactions.get("follows"), interactions.get("follows_count"))
+        interaction_counts["interaction"] = _first_present(interactions.get("interaction"), interactions.get("interaction_count"))
 
     profile = {
         **account_profile_from_user_info(user_info),
@@ -79,7 +84,7 @@ def enrich_user_info_with_xhs_self_profile(user_info: dict[str, Any], response: 
     return {
         **user_info,
         "nickname": _first_present(basic_info.get("nickname"), user_info.get("nickname"), ""),
-        "avatar_url": _first_present(basic_info.get("images"), basic_info.get("imageb"), user_info.get("avatar_url"), ""),
+        "avatar_url": _first_present(basic_info.get("images"), basic_info.get("imageb"), basic_info.get("avatar"), user_info.get("avatar_url"), ""),
         "profile": profile,
     }
 

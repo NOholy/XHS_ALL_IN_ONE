@@ -7,6 +7,7 @@ import json
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from backend.app.adapters.xhs.creator_login_adapter import XhsCreatorLoginAdapter
 from backend.app.adapters.xhs.pc_login_adapter import XhsPcLoginAdapter
@@ -38,14 +39,14 @@ class PhoneConfirmRequest(BaseModel):
     session_id: int
     phone: str = Field(min_length=6, max_length=32)
     code: str = Field(min_length=4, max_length=12)
-    sync_creator: bool | None = None
+    sync_creator: Optional[bool] = None
 
 
 def _dump_json(value: dict) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def _load_json(value: str | None) -> dict:
+def _load_json(value: Optional[str]) -> dict:
     if not value:
         return {}
     return json.loads(value)
@@ -57,7 +58,7 @@ def _dump_temp_state(cookies: dict, *, sync_creator: bool = False) -> str:
     return _dump_json(cookies)
 
 
-def _load_temp_state(value: str | None) -> tuple[dict, bool]:
+def _load_temp_state(value: Optional[str]) -> tuple[dict, bool]:
     payload = _load_json(value)
     if isinstance(payload, dict) and isinstance(payload.get("cookies"), dict):
         return payload["cookies"], bool(payload.get("sync_creator"))
@@ -96,7 +97,7 @@ def _sync_creator_account_from_pc_login(
     user_id: int,
     pc_cookies: dict,
     creator_adapter: XhsCreatorLoginAdapter,
-) -> dict | None:
+) -> Optional[dict]:
     try:
         creator_result = creator_adapter.exchange_from_user_cookies(pc_cookies)
         creator_user_info = creator_adapter.get_user_info(creator_result["cookies"])
@@ -139,7 +140,7 @@ def _create_account_from_login(
 
 @router.post("/pc/qrcode")
 def pc_qrcode(
-    payload: PcQrCodeRequest | None = None,
+    payload: Optional[PcQrCodeRequest] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
     adapter: XhsPcLoginAdapter = Depends(get_pc_login_adapter),
@@ -350,7 +351,7 @@ def _confirm_phone_login(
     db: Session,
     adapter,
     sub_type: str,
-    creator_adapter: XhsCreatorLoginAdapter | None,
+    creator_adapter: Optional[XhsCreatorLoginAdapter],
 ):
     session = db.get(LoginSession, payload.session_id)
     if (

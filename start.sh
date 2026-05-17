@@ -14,8 +14,11 @@ if [ ! -d "venv" ]; then
     echo "请先根据文档执行环境安装步骤："
     echo "1. python3 -m venv venv"
     echo "2. source venv/bin/activate"
-    echo "3. pip install -r requirements.txt"
-    echo "4. npm install && cd frontend && npm install"
+    echo "3. pip install --upgrade pip"
+    echo "4. pip install -r requirements.txt"
+    echo "5. pip install -e ./xhs-cli"
+    echo "6. cloakbrowser install && playwright install"
+    echo "7. npm install && cd frontend && npm install"
     echo "======================================"
     exit 1
 fi

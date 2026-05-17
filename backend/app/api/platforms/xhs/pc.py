@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.adapters.xhs.pc_api_adapter import XhsPcApiAdapter
+from backend.app.core.config import get_settings
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_user
 from backend.app.core.security import decrypt_text
@@ -41,7 +42,22 @@ class NoteCommentsRequest(BaseModel):
     note_url: str = Field(min_length=1)
 
 
+class PostCommentRequest(BaseModel):
+    account_id: int
+    note_url: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=1000)
+    reply_to_comment_id: str = Field(default="")
+
+
 def get_xhs_pc_api_adapter_factory():
+    """读操作适配器工厂 — 根据 xhs_read_client_type 动态返回。"""
+    client_type = get_settings().xhs_read_client_type
+    if client_type == "cli":
+        try:
+            from backend.app.adapters.xhs.cli_pc_api_adapter import CliXhsPcApiAdapter
+            return CliXhsPcApiAdapter
+        except ImportError:
+            pass  # xhs-cli 依赖缺失，回退到 Direct
     return XhsPcApiAdapter
 
 
@@ -58,9 +74,11 @@ def _cookies_to_string(value: str) -> str:
 def _metric(value: Any) -> int:
     if value is None:
         return 0
+    if isinstance(value, bool):
+        return 0
     if isinstance(value, (int, float)):
         return int(value)
-    text = str(value).strip().replace(",", "")
+    text = str(value).strip()
     if not text:
         return 0
     multiplier = 1
@@ -153,7 +171,7 @@ def _note_url(note_id: str, item: dict[str, Any], card: dict[str, Any]) -> str:
 
 
 def _comment_id(comment: dict[str, Any]) -> str:
-    return str(comment.get("comment_id") or comment.get("id") or comment.get("commentId") or "")
+    return str(comment.get("comment_id") or comment.get("id") or "")
 
 
 def _comment_user(comment: dict[str, Any]) -> dict[str, Any]:
@@ -381,6 +399,42 @@ def note_comments(
 
 def note_comments_placeholder():
     return {"total": 1, "items": [{"id": "comment-1", "content": "这个选题很有用"}]}
+
+
+@router.post("/notes/comments/post")
+def post_comment(
+    payload: PostCommentRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    cookies = _get_owned_pc_account_cookies(db, current_user, payload.account_id)
+
+    # 强制使用 CLI 适配器进行写入操作，防风控
+    try:
+        from backend.app.adapters.xhs.cli_pc_api_adapter import CliXhsPcApiAdapter
+        adapter = CliXhsPcApiAdapter(cookies)
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="CLI adapter is required for posting comments but xhs-cli is not available",
+        )
+
+    if payload.reply_to_comment_id:
+        success, message, _ = adapter.reply_comment(
+            payload.note_url, payload.reply_to_comment_id, payload.content
+        )
+    else:
+        success, message, _ = adapter.post_comment(
+            payload.note_url, payload.content
+        )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=message or "Failed to post comment",
+        )
+
+    return {"success": True, "message": "Comment posted successfully"}
 
 
 @router.post("/users/notes")

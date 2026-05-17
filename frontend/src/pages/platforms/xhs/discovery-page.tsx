@@ -17,7 +17,7 @@ import { Alert, Badge, Button, Card, Col, Descriptions, Drawer, Empty, Input, Ro
 import { FormEvent, MouseEvent, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { fetchAccounts, fetchSavedNoteIds, fetchXhsNoteComments, fetchXhsNoteDetail, saveXhsNotesToLibrary, searchXhsNotes } from "../../../lib/api";
+import { fetchAccounts, fetchSavedNoteIds, fetchXhsNoteComments, fetchXhsNoteDetail, saveXhsNotesToLibrary, searchXhsNotes, postXhsNoteComment } from "../../../lib/api";
 import type { NoteComment, PlatformAccount, XhsSearchNote, XhsSearchOptions } from "../../../types";
 
 const { Title, Text, Paragraph } = Typography;
@@ -94,6 +94,10 @@ export function XhsDiscoveryPage() {
   const [commentPreviewByNoteId, setCommentPreviewByNoteId] = useState<Record<string, NoteComment[]>>({});
   const [commentPreviewErrors, setCommentPreviewErrors] = useState<Record<string, string>>({});
   const [loadingCommentNoteIds, setLoadingCommentNoteIds] = useState<string[]>([]);
+  const [commentInputByNoteId, setCommentInputByNoteId] = useState<Record<string, string>>({});
+  const [replyTargetByNoteId, setReplyTargetByNoteId] = useState<Record<string, NoteComment | null>>({});
+  const [postingCommentNoteIds, setPostingCommentNoteIds] = useState<string[]>([]);
+  const [commentPostErrors, setCommentPostErrors] = useState<Record<string, string>>({});
 
   const pcAccounts = useMemo(() => accounts.filter((a) => a.platform === "xhs" && a.sub_type === "pc"), [accounts]);
   const pcAccountOptions = useMemo(() => pcAccounts.map((a) => ({ value: a.id, label: `${a.nickname || `PC ${a.id}`} · ${a.status}` })), [pcAccounts]);
@@ -186,6 +190,36 @@ export function XhsDiscoveryPage() {
     finally { setLoadingCommentNoteIds((c) => c.filter((id) => id !== note.note_id)); }
   }
 
+  async function handlePostComment(note: XhsSearchNote) {
+    if (!selectedAccountId) { setCommentPostErrors((c) => ({ ...c, [note.note_id]: "请先选择一个 PC 账号。" })); return; }
+    const url = getPreviewNoteUrl(note);
+    if (!url) { setCommentPostErrors((c) => ({ ...c, [note.note_id]: "缺少笔记 URL。" })); return; }
+    const content = (commentInputByNoteId[note.note_id] || "").trim();
+    if (!content) { setCommentPostErrors((c) => ({ ...c, [note.note_id]: "评论内容不能为空。" })); return; }
+    
+    setPostingCommentNoteIds((c) => [...c, note.note_id]);
+    setCommentPostErrors((c) => ({ ...c, [note.note_id]: "" }));
+    
+    try {
+      const replyTarget = replyTargetByNoteId[note.note_id];
+      await postXhsNoteComment({
+        account_id: selectedAccountId,
+        note_url: url,
+        content: content,
+        reply_to_comment_id: replyTarget ? replyTarget.comment_id : undefined,
+      });
+      setCommentInputByNoteId((c) => ({ ...c, [note.note_id]: "" }));
+      setReplyTargetByNoteId((c) => ({ ...c, [note.note_id]: null }));
+      const r = await fetchXhsNoteComments({ account_id: selectedAccountId, note_url: url });
+      setCommentPreviewByNoteId((c) => ({ ...c, [note.note_id]: r.items }));
+    } catch (err: unknown) {
+      const a = err as { response?: { status?: number; data?: { detail?: string } }; message?: string };
+      setCommentPostErrors((c) => ({ ...c, [note.note_id]: a?.response?.data?.detail ? `[${a.response.status}] ${a.response.data.detail}` : `评论发送失败：${a?.message || "请检查网络"}` }));
+    } finally {
+      setPostingCommentNoteIds((c) => c.filter((id) => id !== note.note_id));
+    }
+  }
+
   useEffect(() => { void loadAccounts(); void loadSavedNoteIds(); }, []);
 
   const noPcAccount = !isLoadingAccounts && pcAccounts.length === 0;
@@ -258,15 +292,26 @@ export function XhsDiscoveryPage() {
                       {commentPreviewErrors[note.note_id] && <Alert message={commentPreviewErrors[note.note_id]} type="error" style={{ marginTop: 8, fontSize: 12 }} showIcon />}
                       {commentPreviewByNoteId[note.note_id] && (
                         <div style={{ marginTop: 8, borderTop: "1px solid #303030", paddingTop: 8 }} onClick={stopCardClick}>
+                          <div style={{ marginBottom: 8, display: "flex", gap: 8 }}>
+                            <Input size="small" placeholder="快捷评论..." value={commentInputByNoteId[note.note_id] || ""} onChange={(e) => setCommentInputByNoteId((c) => ({ ...c, [note.note_id]: e.target.value }))} onPressEnter={() => void handlePostComment(note)} />
+                            <Button size="small" type="primary" loading={postingCommentNoteIds.includes(note.note_id)} onClick={() => void handlePostComment(note)}>发送</Button>
+                          </div>
+                          {commentPostErrors[note.note_id] && <Alert message={commentPostErrors[note.note_id]} type="error" style={{ marginBottom: 8, fontSize: 12 }} showIcon />}
                           {commentPreviewByNoteId[note.note_id].length === 0 ? <Text type="secondary" style={{ fontSize: 12 }}>暂无评论</Text> : null}
                           {commentPreviewByNoteId[note.note_id].filter((c) => !c.parent_comment_id).slice(0, 4).map((c) => (
                             <div key={c.comment_id} style={{ marginBottom: 6, fontSize: 12 }}>
                               <Text strong style={{ fontSize: 12 }}>{c.user_name}</Text> <Text type="secondary" style={{ fontSize: 11 }}>{c.created_at_remote} · {c.like_count} likes</Text>
                               <div style={{ color: "rgba(255,255,255,.65)" }}>{c.content}</div>
+                              <div style={{ marginTop: 2 }}>
+                                <span style={{ color: "#1668dc", cursor: "pointer", fontSize: 11 }} onClick={() => { setReplyTargetByNoteId((prev) => ({ ...prev, [note.note_id]: c })); void openDetail(note); }}>回复</span>
+                              </div>
                               {getChildComments(note.note_id, c.comment_id).map((r) => (
                                 <div key={r.comment_id} style={{ marginLeft: 16, marginTop: 4 }}>
                                   <Text strong style={{ fontSize: 11 }}>{r.user_name}</Text> <Text type="secondary" style={{ fontSize: 11 }}>{r.like_count} likes</Text>
                                   <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{r.content}</div>
+                                  <div style={{ marginTop: 2 }}>
+                                    <span style={{ color: "#1668dc", cursor: "pointer", fontSize: 11 }} onClick={() => { setReplyTargetByNoteId((prev) => ({ ...prev, [note.note_id]: r })); void openDetail(note); }}>回复</span>
+                                  </div>
                                 </div>
                               ))}
                             </div>
@@ -349,17 +394,46 @@ export function XhsDiscoveryPage() {
             </Space>
 
             {commentPreviewErrors[selectedNote.note_id] && <Alert message={commentPreviewErrors[selectedNote.note_id]} type="error" showIcon style={{ marginBottom: 12 }} />}
+            {commentPostErrors[selectedNote.note_id] && <Alert message={commentPostErrors[selectedNote.note_id]} type="error" showIcon style={{ marginBottom: 12 }} />}
             {commentPreviewByNoteId[selectedNote.note_id] && (
-              <Card size="small" title="评论预览" style={{ background: "#1f1f1f" }}>
+              <Card size="small" title="评论与回复" style={{ background: "#1f1f1f" }}>
+                <div style={{ marginBottom: 16 }}>
+                  {replyTargetByNoteId[selectedNote.note_id] && (
+                    <Alert 
+                      message={`回复 ${replyTargetByNoteId[selectedNote.note_id]?.user_name} 的评论`} 
+                      type="info" 
+                      showIcon 
+                      action={<Button size="small" type="text" onClick={() => setReplyTargetByNoteId((c) => ({ ...c, [selectedNote.note_id]: null }))}>取消回复</Button>}
+                      style={{ marginBottom: 8 }}
+                    />
+                  )}
+                  <Input.TextArea 
+                    rows={2} 
+                    placeholder="写下你的评论..." 
+                    value={commentInputByNoteId[selectedNote.note_id] || ""} 
+                    onChange={(e) => setCommentInputByNoteId((c) => ({ ...c, [selectedNote.note_id]: e.target.value }))}
+                  />
+                  <div style={{ marginTop: 8, textAlign: "right" }}>
+                    <Button type="primary" loading={postingCommentNoteIds.includes(selectedNote.note_id)} onClick={() => void handlePostComment(selectedNote)}>
+                      发送评论
+                    </Button>
+                  </div>
+                </div>
                 {commentPreviewByNoteId[selectedNote.note_id].length === 0 ? <Text type="secondary">暂无评论</Text> : null}
                 {commentPreviewByNoteId[selectedNote.note_id].filter((c) => !c.parent_comment_id).map((c) => (
                   <div key={c.comment_id} style={{ marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid #303030" }}>
                     <Space><Text strong style={{ fontSize: 13 }}>{c.user_name}</Text><Text type="secondary" style={{ fontSize: 11 }}>{c.created_at_remote} · {c.like_count} likes</Text></Space>
                     <div style={{ color: "rgba(255,255,255,.65)", fontSize: 13, marginTop: 2 }}>{c.content}</div>
+                    <div style={{ marginTop: 4 }}>
+                      <Button size="small" type="link" style={{ padding: 0, fontSize: 12 }} onClick={() => setReplyTargetByNoteId((prev) => ({ ...prev, [selectedNote.note_id]: c }))}>回复</Button>
+                    </div>
                     {getChildComments(selectedNote.note_id, c.comment_id).map((r) => (
                       <div key={r.comment_id} style={{ marginLeft: 20, marginTop: 6, paddingLeft: 8, borderLeft: "2px solid #303030" }}>
                         <Space><Text strong style={{ fontSize: 12 }}>{r.user_name}</Text><Text type="secondary" style={{ fontSize: 11 }}>{r.like_count} likes</Text></Space>
                         <div style={{ color: "rgba(255,255,255,.55)", fontSize: 12 }}>{r.content}</div>
+                        <div style={{ marginTop: 4 }}>
+                          <Button size="small" type="link" style={{ padding: 0, fontSize: 12 }} onClick={() => setReplyTargetByNoteId((prev) => ({ ...prev, [selectedNote.note_id]: r }))}>回复</Button>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   ClockCircleOutlined,
+  CommentOutlined,
   DeleteOutlined,
   EditOutlined,
   PauseCircleOutlined,
@@ -15,6 +16,7 @@ import {
   Card,
   Checkbox,
   Col,
+  Divider,
   Descriptions,
   Empty,
   Form,
@@ -27,6 +29,7 @@ import {
   Space,
   Spin,
   Statistic,
+  Switch,
   Tag,
   Typography,
 } from "antd";
@@ -83,6 +86,12 @@ export function AutoOpsPage() {
   const [createPcAccountId, setCreatePcAccountId] = useState<number | null>(null);
   const [createCreatorAccountId, setCreateCreatorAccountId] = useState<number | null>(null);
   const [createInstruction, setCreateInstruction] = useState("");
+  const [createEnableAutoComment, setCreateEnableAutoComment] = useState(false);
+  const [createCommentTemplates, setCreateCommentTemplates] = useState("");
+  const [createCommentInstruction, setCreateCommentInstruction] = useState("");
+  const [createEnableAutoReply, setCreateEnableAutoReply] = useState(false);
+  const [createReplyTemplates, setCreateReplyTemplates] = useState("");
+  const [createReplyInstruction, setCreateReplyInstruction] = useState("");
   const [createScheduleType, setCreateScheduleType] = useState<string>("manual");
   const [createScheduleTime, setCreateScheduleTime] = useState<string>("09:00");
   const [createScheduleDays, setCreateScheduleDays] = useState<string>("");
@@ -94,6 +103,12 @@ export function AutoOpsPage() {
   const [editName, setEditName] = useState("");
   const [editKeywords, setEditKeywords] = useState("");
   const [editInstruction, setEditInstruction] = useState("");
+  const [editEnableAutoComment, setEditEnableAutoComment] = useState(false);
+  const [editCommentTemplates, setEditCommentTemplates] = useState("");
+  const [editCommentInstruction, setEditCommentInstruction] = useState("");
+  const [editEnableAutoReply, setEditEnableAutoReply] = useState(false);
+  const [editReplyTemplates, setEditReplyTemplates] = useState("");
+  const [editReplyInstruction, setEditReplyInstruction] = useState("");
   const [editScheduleType, setEditScheduleType] = useState("manual");
   const [editScheduleTime, setEditScheduleTime] = useState("09:00");
   const [editScheduleDays, setEditScheduleDays] = useState("");
@@ -143,12 +158,20 @@ export function AutoOpsPage() {
     setError(null);
     setMessage(null);
     try {
+      const commentTpls = createCommentTemplates.split("\n").map(s => s.trim()).filter(Boolean);
+      const replyTpls = createReplyTemplates.split("\n").map(s => s.trim()).filter(Boolean);
       const created = await createAutoTask({
         name: createName.trim(),
         keywords,
         pc_account_id: createPcAccountId,
         creator_account_id: createCreatorAccountId,
         ai_instruction: createInstruction,
+        enable_auto_comment: createEnableAutoComment,
+        comment_templates: commentTpls.length > 0 ? commentTpls : undefined,
+        comment_instruction: createCommentInstruction || undefined,
+        enable_auto_reply: createEnableAutoReply,
+        reply_templates: replyTpls.length > 0 ? replyTpls : undefined,
+        reply_instruction: createReplyInstruction || undefined,
         schedule_type: createScheduleType as "manual" | "daily" | "weekly" | "interval",
         schedule_time: createScheduleTime,
         schedule_days: createScheduleDays,
@@ -161,6 +184,12 @@ export function AutoOpsPage() {
       setCreatePcAccountId(null);
       setCreateCreatorAccountId(null);
       setCreateInstruction("");
+      setCreateEnableAutoComment(false);
+      setCreateCommentTemplates("");
+      setCreateCommentInstruction("");
+      setCreateEnableAutoReply(false);
+      setCreateReplyTemplates("");
+      setCreateReplyInstruction("");
       setCreateScheduleType("manual");
       setCreateScheduleTime("09:00");
       setCreateScheduleDays("");
@@ -223,6 +252,12 @@ export function AutoOpsPage() {
     setEditName(task.name);
     setEditKeywords((task.keywords || []).join("\n"));
     setEditInstruction(task.ai_instruction);
+    setEditEnableAutoComment(task.enable_auto_comment);
+    setEditCommentTemplates((task.comment_templates || []).join("\n"));
+    setEditCommentInstruction(task.comment_instruction || "");
+    setEditEnableAutoReply(task.enable_auto_reply);
+    setEditReplyTemplates((task.reply_templates || []).join("\n"));
+    setEditReplyInstruction(task.reply_instruction || "");
     setEditScheduleType(task.schedule_type || "manual");
     setEditScheduleTime(task.schedule_time || "09:00");
     setEditScheduleDays(task.schedule_days || "");
@@ -236,10 +271,18 @@ export function AutoOpsPage() {
     setMessage(null);
     try {
       const keywords = parseKeywords(editKeywords);
+      const editCommentTpls = editCommentTemplates.split("\n").map(s => s.trim()).filter(Boolean);
+      const editReplyTpls = editReplyTemplates.split("\n").map(s => s.trim()).filter(Boolean);
       const updated = await updateAutoTask(editTask.id, {
         name: editName.trim() || undefined,
         keywords: keywords.length > 0 ? keywords : undefined,
         ai_instruction: editInstruction,
+        enable_auto_comment: editEnableAutoComment,
+        comment_templates: editCommentTpls,
+        comment_instruction: editCommentInstruction,
+        enable_auto_reply: editEnableAutoReply,
+        reply_templates: editReplyTpls,
+        reply_instruction: editReplyInstruction,
         schedule_type: editScheduleType as "manual" | "daily" | "weekly" | "interval",
         schedule_time: editScheduleTime,
         schedule_days: editScheduleDays,
@@ -350,7 +393,35 @@ export function AutoOpsPage() {
                       valueStyle={{ fontSize: 20, color: "#e8e8e8" }}
                     />
                   </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="评论"
+                      value={task.total_comments}
+                      valueStyle={{ fontSize: 20, color: task.enable_auto_comment ? "#52c41a" : "#8c8c8c" }}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Statistic
+                      title="回复"
+                      value={task.total_replies}
+                      valueStyle={{ fontSize: 20, color: task.enable_auto_reply ? "#52c41a" : "#8c8c8c" }}
+                    />
+                  </Col>
                 </Row>
+
+                {/* Comment/Reply status */}
+                {(task.enable_auto_comment || task.enable_auto_reply) && (
+                  <div style={{ marginBottom: 12 }}>
+                    <Space size={4} wrap>
+                      {task.enable_auto_comment && (
+                        <Tag icon={<CommentOutlined />} color="cyan">自动评论</Tag>
+                      )}
+                      {task.enable_auto_reply && (
+                        <Tag icon={<CommentOutlined />} color="purple">自动回复</Tag>
+                      )}
+                    </Space>
+                  </div>
+                )}
 
                 {/* Time info */}
                 <Space direction="vertical" size={2} style={{ width: "100%", marginBottom: 12 }}>
@@ -551,6 +622,67 @@ export function AutoOpsPage() {
               />
             </Form.Item>
 
+            <Divider orientation={"left" as any} style={{ borderColor: "#303030", color: "#8c8c8c" }}>
+              <CommentOutlined /> 自动互动
+            </Divider>
+            <Row gutter={16}>
+              <Col xs={24} md={12}>
+                <Form.Item label="自动评论">
+                  <Switch checked={createEnableAutoComment} onChange={setCreateEnableAutoComment} />
+                </Form.Item>
+                {createEnableAutoComment && (
+                  <>
+                    <Form.Item label="评论模版（每行一条）">
+                      <TextArea
+                        placeholder={"太赞了，学到了！\n收藏收藏\n这也太实用了吧"}
+                        value={createCommentTemplates}
+                        onChange={(e) => setCreateCommentTemplates(e.target.value)}
+                        rows={3}
+                      />
+                    </Form.Item>
+                    <Form.Item label="评论改写指令">
+                      <TextArea
+                        placeholder="请根据笔记内容，结合选中的评论模版进行改写。"
+                        value={createCommentInstruction}
+                        onChange={(e) => setCreateCommentInstruction(e.target.value)}
+                        rows={2}
+                        maxLength={2000}
+                      />
+                    </Form.Item>
+                  </>
+                )}
+              </Col>
+              <Col xs={24} md={12}>
+                <Form.Item label="自动回复">
+                  <Switch checked={createEnableAutoReply} onChange={setCreateEnableAutoReply} />
+                </Form.Item>
+                {createEnableAutoReply && (
+                  <>
+                    <Form.Item label="回复模版（每行一条）">
+                      <TextArea
+                        placeholder={"说的对，我也是这么觉得的。\n哈哈确实\n太同意了"}
+                        value={createReplyTemplates}
+                        onChange={(e) => setCreateReplyTemplates(e.target.value)}
+                        rows={3}
+                      />
+                    </Form.Item>
+                    <Form.Item label="回复改写指令">
+                      <TextArea
+                        placeholder="请针对目标评论，结合选定模版进行改写回复。"
+                        value={createReplyInstruction}
+                        onChange={(e) => setCreateReplyInstruction(e.target.value)}
+                        rows={2}
+                        maxLength={2000}
+                      />
+                    </Form.Item>
+                  </>
+                )}
+              </Col>
+            </Row>
+
+            <Divider orientation={"left" as any} style={{ borderColor: "#303030", color: "#8c8c8c" }}>
+              <ClockCircleOutlined /> 调度
+            </Divider>
             <Form.Item label="调度方式">
               <Select value={createScheduleType} onChange={setCreateScheduleType} options={[
                 { value: "manual", label: "手动触发" },
@@ -645,6 +777,65 @@ export function AutoOpsPage() {
             />
           </Form.Item>
 
+          <Divider orientation={"left" as any} style={{ borderColor: "#303030", color: "#8c8c8c" }}>
+            <CommentOutlined /> 自动互动
+          </Divider>
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item label="自动评论">
+                <Switch checked={editEnableAutoComment} onChange={setEditEnableAutoComment} />
+              </Form.Item>
+              {editEnableAutoComment && (
+                <>
+                  <Form.Item label="评论模版（每行一条）">
+                    <TextArea
+                      placeholder={"太赞了，学到了！\n收藏收藏"}
+                      value={editCommentTemplates}
+                      onChange={(e) => setEditCommentTemplates(e.target.value)}
+                      rows={3}
+                    />
+                  </Form.Item>
+                  <Form.Item label="评论改写指令">
+                    <TextArea
+                      value={editCommentInstruction}
+                      onChange={(e) => setEditCommentInstruction(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                    />
+                  </Form.Item>
+                </>
+              )}
+            </Col>
+            <Col xs={24} md={12}>
+              <Form.Item label="自动回复">
+                <Switch checked={editEnableAutoReply} onChange={setEditEnableAutoReply} />
+              </Form.Item>
+              {editEnableAutoReply && (
+                <>
+                  <Form.Item label="回复模版（每行一条）">
+                    <TextArea
+                      placeholder={"说的对，我也是这么觉得的。\n哈哈确实"}
+                      value={editReplyTemplates}
+                      onChange={(e) => setEditReplyTemplates(e.target.value)}
+                      rows={3}
+                    />
+                  </Form.Item>
+                  <Form.Item label="回复改写指令">
+                    <TextArea
+                      value={editReplyInstruction}
+                      onChange={(e) => setEditReplyInstruction(e.target.value)}
+                      rows={2}
+                      maxLength={2000}
+                    />
+                  </Form.Item>
+                </>
+              )}
+            </Col>
+          </Row>
+
+          <Divider orientation={"left" as any} style={{ borderColor: "#303030", color: "#8c8c8c" }}>
+            <ClockCircleOutlined /> 调度
+          </Divider>
           <Form.Item label="调度方式">
             <Select value={editScheduleType} onChange={setEditScheduleType} options={[
               { value: "manual", label: "手动触发" },

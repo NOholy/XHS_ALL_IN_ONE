@@ -66,3 +66,10 @@ class XhsPcApiAdapter:
         if not success or not payload:
             raise RuntimeError(message or "XHS self profile refresh failed")
         return payload
+
+    def post_comment(self, note_url: str, content: str) -> tuple[bool, str, Any]:
+        # Direct API comment is risky and currently unsupported, use CLI instead.
+        return False, "Comment operations are only supported in CLI mode to avoid bans", None
+
+    def reply_comment(self, note_url: str, comment_id: str, content: str) -> tuple[bool, str, Any]:
+        return False, "Comment operations are only supported in CLI mode to avoid bans", None

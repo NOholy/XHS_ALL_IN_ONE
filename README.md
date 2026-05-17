@@ -161,7 +161,10 @@
 git clone https://github.com/cv-cat/XHS_ALL_IN_ONE.git
 cd XHS_ALL_IN_ONE
 
+pip install --upgrade pip
 pip install -r requirements.txt
+pip install -e ./xhs-cli
+cloakbrowser install && playwright install
 npm install
 cd frontend && npm install && cd ..
 ```

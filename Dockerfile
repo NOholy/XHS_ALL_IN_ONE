@@ -46,10 +46,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 # Install Python dependencies
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy project source
 COPY . .
+
+# Install xhs-cli and browser dependencies
+RUN pip install -e ./xhs-cli && \
+    cloakbrowser install && \
+    playwright install-deps && \
+    playwright install
 
 # Copy pre-built frontend from Stage 1
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist

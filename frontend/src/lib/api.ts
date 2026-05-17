@@ -130,8 +130,9 @@ http.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config as typeof error.config & { _authRetry?: boolean; _silent?: boolean };
-    if (error.response?.status !== 401 || originalRequest?._authRetry || !getRefreshToken()) {
-      if (!originalRequest?._silent) {
+    const isRefreshRequest = originalRequest?.url?.includes("/auth/refresh");
+    if (error.response?.status !== 401 || originalRequest?._authRetry || !getRefreshToken() || isRefreshRequest) {
+      if (!originalRequest?._silent && !isRefreshRequest) {
         const detail = error.response?.data?.detail;
         const msg = typeof detail === "string" ? detail : "请求失败，请稍后重试";
         message.error(msg);
@@ -448,6 +449,16 @@ export async function fetchXhsNoteComments(payload: {
     page_size: response.data.items.length,
     items: response.data.items
   };
+}
+
+export async function postXhsNoteComment(payload: {
+  account_id: number;
+  note_url: string;
+  content: string;
+  reply_to_comment_id?: string;
+}): Promise<{ success: boolean; message: string }> {
+  const response = await http.post<{ success: boolean; message: string }>("/xhs/pc/notes/comments/post", payload);
+  return response.data;
 }
 
 export async function saveXhsNotesToLibrary(payload: {

@@ -40,6 +40,12 @@ class AutoTaskCreateRequest(BaseModel):
     pc_account_id: int
     creator_account_id: int
     ai_instruction: str = Field(default="", max_length=2000)
+    enable_auto_comment: bool = False
+    comment_templates: Optional[list[str]] = None
+    comment_instruction: str = Field(default="请根据笔记内容，结合选中的评论模版进行改写。要求符合真实用户口吻，字数控制在20字左右。", max_length=2000)
+    enable_auto_reply: bool = False
+    reply_templates: Optional[list[str]] = None
+    reply_instruction: str = Field(default="请针对这篇笔记中的这条评论，结合选中的模版进行回复，制造话题感。", max_length=2000)
     schedule_type: str = Field(default="manual", pattern="^(manual|daily|weekly|interval)$")
     schedule_time: str = Field(default="09:00", max_length=5)
     schedule_days: str = Field(default="", max_length=64)
@@ -50,6 +56,12 @@ class AutoTaskUpdateRequest(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=128)
     keywords: Optional[list[str]] = None
     ai_instruction: Optional[str] = Field(default=None, max_length=2000)
+    enable_auto_comment: Optional[bool] = None
+    comment_templates: Optional[list[str]] = None
+    comment_instruction: Optional[str] = Field(default=None, max_length=2000)
+    enable_auto_reply: Optional[bool] = None
+    reply_templates: Optional[list[str]] = None
+    reply_instruction: Optional[str] = Field(default=None, max_length=2000)
     status: Optional[str] = Field(default=None, pattern="^(active|paused|completed)$")
     schedule_type: Optional[str] = Field(default=None, pattern="^(manual|daily|weekly|interval)$")
     schedule_time: Optional[str] = Field(default=None, max_length=5)
@@ -66,6 +78,12 @@ def _serialize_auto_task(task: AutoTask) -> dict[str, Any]:
         "pc_account_id": task.pc_account_id,
         "creator_account_id": task.creator_account_id,
         "ai_instruction": task.ai_instruction,
+        "enable_auto_comment": bool(task.enable_auto_comment),
+        "comment_templates": task.comment_templates or [],
+        "comment_instruction": task.comment_instruction,
+        "enable_auto_reply": bool(task.enable_auto_reply),
+        "reply_templates": task.reply_templates or [],
+        "reply_instruction": task.reply_instruction,
         "status": task.status,
         "schedule_type": task.schedule_type,
         "schedule_time": task.schedule_time,
@@ -74,6 +92,8 @@ def _serialize_auto_task(task: AutoTask) -> dict[str, Any]:
         "last_run_at": task.last_run_at.isoformat() if task.last_run_at else None,
         "next_run_at": task.next_run_at.isoformat() if task.next_run_at else None,
         "total_published": task.total_published,
+        "total_comments": task.total_comments,
+        "total_replies": task.total_replies,
         "created_at": task.created_at.isoformat(),
     }
 
@@ -172,6 +192,12 @@ def create_auto_task(
         pc_account_id=payload.pc_account_id,
         creator_account_id=payload.creator_account_id,
         ai_instruction=payload.ai_instruction,
+        enable_auto_comment=payload.enable_auto_comment,
+        comment_templates=payload.comment_templates,
+        comment_instruction=payload.comment_instruction,
+        enable_auto_reply=payload.enable_auto_reply,
+        reply_templates=payload.reply_templates,
+        reply_instruction=payload.reply_instruction,
         schedule_type=payload.schedule_type,
         schedule_time=payload.schedule_time,
         schedule_days=payload.schedule_days,
@@ -200,6 +226,18 @@ def update_auto_task(
         auto_task.keywords = payload.keywords
     if payload.ai_instruction is not None:
         auto_task.ai_instruction = payload.ai_instruction
+    if payload.enable_auto_comment is not None:
+        auto_task.enable_auto_comment = payload.enable_auto_comment
+    if payload.comment_templates is not None:
+        auto_task.comment_templates = payload.comment_templates
+    if payload.comment_instruction is not None:
+        auto_task.comment_instruction = payload.comment_instruction
+    if payload.enable_auto_reply is not None:
+        auto_task.enable_auto_reply = payload.enable_auto_reply
+    if payload.reply_templates is not None:
+        auto_task.reply_templates = payload.reply_templates
+    if payload.reply_instruction is not None:
+        auto_task.reply_instruction = payload.reply_instruction
     if payload.status is not None:
         auto_task.status = payload.status
 
@@ -404,6 +442,61 @@ def run_auto_task(
                     upload_status="pending",
                 ))
 
+    # ==========================================
+    # Phase 2: Interaction (Comments & Replies)
+    # ==========================================
+    interaction_result = None
+    if auto_task.enable_auto_comment or auto_task.enable_auto_reply:
+        import time
+        try:
+            # Force CLI adapter for interaction to avoid bans
+            from backend.app.adapters.xhs.cli_pc_api_adapter import CliXhsPcApiAdapter
+            cli_adapter = CliXhsPcApiAdapter(pc_cookies)
+            
+            note_url = best_note.get("note_url") or f"https://www.xiaohongshu.com/explore/{best_note.get('note_id')}?xsec_token={best_note.get('xsec_token', '')}"
+            if note_url:
+                success, msg, comments_payload = cli_adapter.get_note_comments(note_url)
+                if success and comments_payload and "data" in comments_payload:
+                    comments = comments_payload["data"].get("comments", [])
+                    
+                    target_comment = None
+                    if auto_task.enable_auto_reply and comments:
+                        # Find a high-engagement comment
+                        valid_comments = [c for c in comments if isinstance(c, dict) and c.get("like_count", 0) > 2]
+                        if valid_comments:
+                            target_comment = max(valid_comments, key=lambda x: x.get("like_count", 0))
+                            
+                    if target_comment and auto_task.enable_auto_reply:
+                        # Reply strategy
+                        time.sleep(random.uniform(2, 5))
+                        template = random.choice(auto_task.reply_templates) if auto_task.reply_templates else "说的对，我也是这么觉得的。"
+                        prompt = f"笔记标题：{draft.title}\n目标评论：{target_comment.get('content')}\n选定模版：{template}\n请针对目标评论，结合选定模版进行改写回复：{auto_task.reply_instruction}"
+                        generated_reply = text_client._complete(
+                            model_config=model_config, api_key=api_key, system_prompt="你是小红书内容互动编辑。", user_prompt=prompt, temperature=0.8
+                        )
+                        c_id = target_comment.get("id") or target_comment.get("comment_id")
+                        if c_id:
+                            r_success, r_msg, _ = cli_adapter.reply_comment(note_url, c_id, generated_reply)
+                            if r_success:
+                                auto_task.total_replies = (auto_task.total_replies or 0) + 1
+                                interaction_result = "reply_success"
+                            
+                    elif auto_task.enable_auto_comment:
+                        # Comment strategy
+                        time.sleep(random.uniform(2, 5))
+                        template = random.choice(auto_task.comment_templates) if auto_task.comment_templates else "太赞了，学到了！"
+                        prompt = f"笔记标题：{draft.title}\n笔记正文：{draft.body}\n选定模版：{template}\n请根据笔记内容对选定模版进行改写，使之符合当前语境：{auto_task.comment_instruction}"
+                        generated_comment = text_client._complete(
+                            model_config=model_config, api_key=api_key, system_prompt="你是小红书内容互动编辑。", user_prompt=prompt, temperature=0.8
+                        )
+                        c_success, c_msg, _ = cli_adapter.post_comment(note_url, generated_comment)
+                        if c_success:
+                            auto_task.total_comments = (auto_task.total_comments or 0) + 1
+                            interaction_result = "comment_success"
+                            
+        except Exception as e:
+            interaction_result = f"interaction_failed: {e}"
+
     # 7. Update auto task counters
     auto_task.total_published = (auto_task.total_published or 0) + 1
     auto_task.last_run_at = shanghai_now()
@@ -415,6 +508,7 @@ def run_auto_task(
         **(tracking_task.payload or {}),
         "publish_job_id": publish_job.id,
         "rewritten_length": len(rewritten_body),
+        "interaction_result": interaction_result,
     }
 
     db.commit()
