@@ -280,20 +280,27 @@ class CliXhsPcApiAdapter:
 
 ## 6. 浏览器引擎配置
 
-### 6.1 引擎选择
+### 6.1 引擎选择与指纹跳跃风控
 
-`xhs-cli` 支持两种底层反指纹浏览器引擎，通过环境变量 `XHS_BROWSER_ENGINE` 切换：
+`xhs-cli` 支持不同的底层反指纹浏览器引擎，通过环境变量 `XHS_BROWSER_ENGINE` 切换。
+
+**🚨 核心风控警告：浏览器指纹跳跃 (Fingerprint Jumping)**
+在早期的设计中，曾设想“使用 `obscura` 进行高速只读搜索，然后切换到 `cloak` 进行拟人化评论”。经过深度风控剖析，这种混用机制是一个**致命的架构错误**。
+小红书的风控系统会绑定 Web Session 和设备指纹（Canvas、WebGL、V8 特征等）。如果同一个账号在无排版引擎的 `obscura` 中读取数据后，立即切换到真实的 `cloak` (Chromium) 引擎中执行写操作，风控大脑会立刻识别出“设备特征瞬间跳跃”，导致封号。
+
+**架构修正原则：**针对需要“查阅后交互”（如截流评论、点赞）的**单账号全链路自动化**，**全流程必须使用统一的真实浏览器引擎**。
 
 | 引擎 | 环境变量值 | 特点 | 推荐场景 |
 |:---|:---|:---|:---|
-| **CloakBrowser** | `cloak`（默认） | 支持 `humanize` 仿人模式 | 生产环境首选 |
-| **Camoufox** | `camoufox` | Firefox 内核级指纹伪装 | `cloak` 被封时的回退 |
+| **CloakBrowser** | `cloak`（默认） | 基于 Chromium，真实的物理轨迹、排版引擎和指纹。 | **生产环境首选**。必须用于包含交互的全链路自动化，确保指纹 100% 连贯。 |
+| **Obscura** | `obscura` | 极速引擎，但不渲染 DOM 且丢弃鼠标轨迹。 | 仅限**无状态、无后续写操作**的高速纯只读抓取。绝对禁止与交互操作混用。 |
+| **Camoufox** | `camoufox` | Firefox 内核级指纹伪装。 | `cloak` 被封时的备用回退方案。 |
 
 ### 6.2 默认配置
 
-```
-XHS_BROWSER_ENGINE=cloak    # 默认引擎
-XHS_HUMANIZE=1              # 默认开启仿人行为
+```env
+XHS_BROWSER_ENGINE=cloak    # 默认引擎，确保全流程指纹安全
+XHS_HUMANIZE=1              # 默认开启底层 CDP 物理仿人行为
 ```
 
 ---

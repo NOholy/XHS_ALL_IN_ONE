@@ -13,19 +13,20 @@ OPENAI_API_BASE = "https://api.openai.com/v1"
 
 # ---- Keyword Configuration ----
 # The primary keyword used for typing in the search box
-SEARCH_KEYWORD = "地陪"
+SEARCH_KEYWORD = "去旅游 求推荐"
 
 # Words that indicate a post might be relevant (used for pre-filtering titles to save time)
-PRE_FILTER_KEYWORDS = ["地陪", "向导", "旅游", "攻略"]
-
-# Words that MUST be present in the post title or content to trigger a comment
-# If empty, all pre-filtered posts will be commented on.
-TARGET_KEYWORDS = ["地陪"]
+PRE_FILTER_KEYWORDS = ["求推荐", "找人带", "有没有", "怎么玩", "路线", "攻略", "旅游", "向导"]
 # -------------------------------
 
-LLM_SYSTEM_PROMPT = """你是一个在小红书上浏览寻找旅游攻略或地陪服务的真实用户。
-请根据提供的帖子正文（或评论上下文），参考给定的模版列表，用一种非常自然、口语化、接地气的方式生成一句简短的回复/评论。
-不要带有AI口吻，不要加多余的废话，只输出一句最终你想发到评论区的文本内容。"""
+LLM_SYSTEM_PROMPT = """你是一个小红书的高级分析师兼回复助手。
+你的任务是阅读用户帖子正文或评论，判断这是否是一个需要"旅游地陪/向导"的潜在精准客户。
+
+判定规则：
+1. 如果帖子是同行打广告、游记分享、避雷吐槽被坑，请直接输出纯文本：SKIP
+2. 如果帖子是游客在求攻略、找本地人带玩、询问路线，说明是精准客户。请生成一句自然、接地气、像真人搭讪的评论，引导对方私信。
+
+不要带有任何AI口吻。如果判断不是客户，只输出SKIP四个英文字母，不要有任何其他字符。"""
 
 TEMPLATES = [
     "感谢分享，想了解一下更详细的当地游玩安排！",
@@ -96,10 +97,12 @@ def human_sleep(min_sec, max_sec):
     time.sleep(delay)
 
 def human_type(text):
-    print(f"[*] Simulating human typing: {text}")
+    print(f"[*] Simulating human CDP typing: {text}")
     for char in text:
-        js(f"document.execCommand('insertText', false, '{char}')")
-        time.sleep(random.uniform(0.05, 0.2))
+        cdp("Input.dispatchKeyEvent", {"type": "keyDown", "text": char})
+        time.sleep(random.uniform(0.01, 0.08))
+        cdp("Input.dispatchKeyEvent", {"type": "keyUp", "text": char})
+        time.sleep(random.uniform(0.08, 0.3))
 
 def get_dynamic_text(content, context_type="post"):
     if COMMENT_MODE == 'template_only' or not OPENAI_API_KEY or OPENAI_API_KEY == "your-api-key-here":
@@ -145,25 +148,37 @@ def submit_comment(text):
         print(f"[!] LIVE MODE: Typing and submitting comment '{text}'.")
         human_type(text)
         human_sleep(1, 2)
-        js("""
+        
+        send_btn_rect = js("""
           (function(){
-            const sendBtn = Array.from(document.querySelectorAll('button, div')).find(e => e.innerText && e.innerText.includes('发送'));
-            if(sendBtn) sendBtn.click();
+            const btn = Array.from(document.querySelectorAll('button, div')).find(e => e.innerText && e.innerText.includes('发送'));
+            if(!btn) return null;
+            const r = btn.getBoundingClientRect();
+            return {x: r.x + r.width/2, y: r.y + r.height/2};
           })();
         """)
+        
+        if send_btn_rect:
+            human_move_and_click(send_btn_rect['x'], send_btn_rect['y'])
+        else:
+            print("[-] Could not find send button!")
 
 def go_back_to_feed():
     print("[*] Closing post overlay to return to feed...")
-    js("""
+    close_btn_rect = js("""
       (function() {
-          const closeBtn = document.querySelector('.close-box') || document.querySelector('.back-icon');
-          if (closeBtn) {
-              closeBtn.click();
-          } else {
-              window.history.back();
-          }
+          const btn = document.querySelector('.close-box') || document.querySelector('.back-icon');
+          if(!btn) return null;
+          const r = btn.getBoundingClientRect();
+          return {x: r.x + r.width/2, y: r.y + r.height/2};
       })();
     """)
+    
+    if close_btn_rect:
+        human_move_and_click(close_btn_rect['x'], close_btn_rect['y'])
+    else:
+        cdp("Input.dispatchKeyEvent", {"type": "keyDown", "windowsVirtualKeyCode": 27, "key": "Escape"})
+        cdp("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Escape"})
     human_sleep(3, 5)
 
 def main():
@@ -208,14 +223,8 @@ def main():
         human_sleep(1, 2)
         human_type(SEARCH_KEYWORD)
         human_sleep(0.5, 1.5)
-        js("""
-          (function() {
-              const evt = new KeyboardEvent('keydown', {bubbles: true, cancelable: true, keyCode: 13, key: 'Enter'});
-              document.activeElement.dispatchEvent(evt);
-              const searchBtn = document.querySelector('.search-btn') || document.querySelector('.search-icon');
-              if (searchBtn) searchBtn.click();
-          })()
-        """)
+        cdp("Input.dispatchKeyEvent", {"type": "keyDown", "windowsVirtualKeyCode": 13, "key": "Enter", "text": "\r"})
+        cdp("Input.dispatchKeyEvent", {"type": "keyUp", "windowsVirtualKeyCode": 13, "key": "Enter"})
         wait_for_load()
         human_sleep(3, 5)
     else:
@@ -304,10 +313,11 @@ def main():
                     print(f"[*] Simulating reading time for {content_length} chars (~{base_read_time:.1f}s)...")
                     human_sleep(base_read_time, base_read_time + random.uniform(2, 5))
                     
-                    has_target_kw = not TARGET_KEYWORDS or any(kw in (content or "") or kw in post['title'] for kw in TARGET_KEYWORDS)
+                    print(f"[*] Analyzing post intent via LLM...")
+                    main_reply_text = get_dynamic_text(content, context_type="post")
                     
-                    if has_target_kw:
-                        print(f"[*] Post matches criteria (Target Keywords: {TARGET_KEYWORDS}). Preparing to comment...")
+                    if "SKIP" not in main_reply_text.upper():
+                        print(f"[*] LLM determined post is a valid lead. Preparing to comment...")
                         
                         comment_box = js("""
                           (function() {
@@ -323,22 +333,21 @@ def main():
                         if comment_box:
                             human_move_and_click(comment_box['x'], comment_box['y'])
                             human_sleep(1, 2)
-                            main_reply_text = get_dynamic_text(content, context_type="post")
                             submit_comment(main_reply_text)
                         
                         print("[*] Scrolling to read comments...")
                         for _ in range(3):
                             js("""
                               const container = document.querySelector('.note-scroller') || window;
-                              container.scrollBy({top: window.innerHeight * 0.4, behavior: 'smooth'});
+                              container.scrollBy({top: window.innerHeight * 0.5, behavior: 'smooth'});
                             """)
-                            human_sleep(1, 3)
+                            human_sleep(2, 4)
                             
                         target_comment = js("""
                           (function() {
-                              const items = Array.from(document.querySelectorAll('.comment-item'));
-                              for(let item of items) {
-                                  const contentEl = item.querySelector('.content');
+                              const comments = Array.from(document.querySelectorAll('.comment-item'));
+                              for(let c of comments) {
+                                  const contentEl = c.querySelector('.content');
                                   if(!contentEl) continue;
                                   const rect = contentEl.getBoundingClientRect();
                                   if(rect.width > 0 && rect.height > 0) {
@@ -366,9 +375,12 @@ def main():
                             """)
                             if nested_box_active:
                                 nested_reply_text = get_dynamic_text(target_comment['text'], context_type="comment")
-                                submit_comment(nested_reply_text)
+                                if "SKIP" not in nested_reply_text.upper():
+                                    submit_comment(nested_reply_text)
+                                else:
+                                    print("[-] LLM determined comment is irrelevant. Skipping nested reply.")
                     else:
-                        print("[*] Post does not contain target keywords. Skipping commenting.")
+                        print("[-] LLM determined post is irrelevant or a complaint (SKIP). Skipping commenting.")
                     
                 except Exception as e:
                     print(f"[!] Error processing post {post['title']}: {e}")
