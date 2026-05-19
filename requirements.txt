@@ -24,3 +24,4 @@ python-jose[cryptography]
 Pillow>=9.2
 pyyaml
 eval-type-backport
+uiautomator2
