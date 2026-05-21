@@ -47,10 +47,21 @@ python scripts/auto_crop_templates.py
 
 由于小红书的风控体系极为严密（基于设备指纹、网络 IP、UI 行为及 USB 状态），工业级机房部署必须严格落实以下对抗措施：
 
-### 3.1 掩饰 USB 调试状态 (屏蔽开发者模式)
-小红书会通过 API 读取 `Settings.Global.ADB_ENABLED` 状态，若发现处在调试模式，会直接限流或封禁。
-*   **方案 A（轻量级，无需 Root）**：执行 `adb tcpip 5555`，然后**拔掉物理数据线**，采用局域网 WiFi 无线连接，同时进入系统设置**手动关闭**开发者选项的总开关（TCP 仍保持连接状态，但系统 API 报关）。
-*   **方案 B（工业级，需 Root，推荐）**：刷入 Magisk 并在其设置中开启“Zygisk”。安装 **Shamiko** 模块隐藏 Root，同时安装 **LSPosed** 配合 **HideMyApplist** 或 **DevOptsHide** 模块，强行 Hook 系统底层，使得小红书无论何时查询，都返回“未开启开发者选项”。
+### 3.1 掩饰 USB 调试状态与 Root 隐藏 (防风控核心)
+小红书会通过 API 读取 `Settings.Global.ADB_ENABLED` 状态，并检测各类 Root 特征。若发现处在调试模式或 Root 环境，会直接限流或封禁。
+**针对不同机型与系统版本，必须采取差异化的初始化方案，严禁盲目升级 Magisk 导致变砖（Bootloop）：**
+
+*   **方案 A（通用轻量级，无需 Root）**：
+    执行 `adb tcpip 5555` 开启无线端口，然后**拔掉物理数据线**，采用局域网 WiFi 无线连接。最重要的一步是：进入系统设置**手动关闭**“开发者选项”的总开关。
+    *(原理：TCP 仍保持连接状态，但系统 API 报关，适合所有无法获取 Root 的测试机)*
+
+*   **方案 B（工业级现代机型，需 Android 10+ & Magisk v24+，推荐）**：
+    刷入 Magisk 并在其设置中开启“Zygisk”。安装 **Shamiko** 模块以完美隐藏 Root。同时安装 **LSPosed** 框架，配合 **HideMyApplist** 或 **DevOptsHide** 模块，强行 Hook 系统底层。
+    *(原理：无论何时查询，都返回“未开启开发者选项”，支持大规模插线群控)*
+
+*   **方案 C（老旧 Root 机型，Android 7-9 & Magisk < v24）**：
+    早期三星（如 Note 9）等 System-As-Root 设备，**严禁强制跨版本升级至 Magisk v24+（极易导致无限重启卡 Logo 或丢失数据）**。
+    应当维持现有老版本，在命令行执行 `adb shell su -c "magiskhide enable"` 开启内置的 MagiskHide 功能，并将小红书（com.xingin.xhs）加入黑名单。对于 ADB 隐藏，因旧版不支持 Zygisk+LSPosed，请务必结合使用 **方案 A** 的拔线法来掩盖调试状态。
 
 ### 3.2 阻断 IP 连坐封禁 (IP Rotation)
 群控农场（Device Farm）严禁多台设备共用同一局域网 WiFi 出口 IP，否则“一机封禁，全网连坐”。
