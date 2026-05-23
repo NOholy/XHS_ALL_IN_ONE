@@ -1,0 +1,127 @@
+# Automation Engine 配置文件
+# ===========================
+# 所有参数均可通过环境变量覆盖（前缀 AE_）
+# 环境变量优先级 > 本文件 > 代码默认值
+
+device:
+  serial: null                    # ADB设备序列号，null=自动检测
+  use_agentless: true             # true=无代理模式(生产), false=uiautomator2(调试)
+  screen_width: 1080
+  screen_height: 1920
+  typing_mode: "clipboard"        # "clipboard" | "opencv"(纯视觉打字)
+  # 初始化开关
+  auto_disable_animations: true
+  auto_keep_screen_on: true
+  auto_rotate_ip_on_init: true
+  auto_crop_templates_on_init: true
+  check_xhs_installed: true
+  check_login_status: true
+
+ocr:
+  endpoint: "http://localhost:8001/ocr"
+  timeout: 60
+  circuit_breaker_threshold: 3
+  circuit_breaker_cooldown: 60
+
+vision:
+  templates_dir: ""               # 空=自动计算(data/ui_templates)
+  template_match_threshold: 0.75
+  card_min_area_ratio: 0.03
+
+risk_control:
+  # 日配额（超限自动停止）
+  max_daily_comments: 10
+  max_daily_likes: 30
+  max_daily_collects: 15
+  max_daily_follows: 5
+  max_daily_searches: 20
+  # 冷却时间（秒）- 评论后强制等待
+  comment_cooldown_min: 60
+  comment_cooldown_max: 180
+  like_cooldown_min: 3
+  like_cooldown_max: 8
+  search_cooldown_min: 10
+  search_cooldown_max: 30
+  # IP轮换
+  ip_rotate_every_n_comments: 3
+  ip_rotate_delay: 5
+  # 拟人化
+  human_sleep_mu: 3.0
+  human_sleep_sigma: 1.0
+  tap_noise_px: 15
+
+farm:
+  enabled: true
+  session_duration_minutes: 30
+  farming_steps: 50
+  # 行为漏斗概率（黄金比例 100:30:10:3:1）
+  enter_post_probability: 0.30
+  like_probability: 0.10
+  collect_probability: 0.03
+  comment_probability: 0.01
+  follow_probability: 0.005
+  # 阅读模拟
+  read_duration_mu: 10.0
+  read_duration_sigma: 4.0
+  scroll_comments_probability: 0.33
+  # 搜索行为
+  random_search_probability: 0.05
+  hot_keywords:
+    - "美食"
+    - "穿搭"
+    - "旅行"
+    - "护肤"
+    - "健身"
+    - "摄影"
+    - "家居"
+    - "宠物"
+  # 个人主页
+  visit_profile_probability: 0.03
+
+intercept:
+  enabled: true
+  # ========== 核心业务参数 ==========
+  keywords:
+    - "地陪"
+    - "旅游攻略"
+  title_filter_keywords:
+    - "地陪"
+    - "找"
+    - "求"
+    - "推荐"
+    - "攻略"
+    - "约"
+  max_search_pages: 3
+  # ========== 评论生成 ==========
+  # "template" = 模板随机 | "contextual" = 基于标题匹配模板 | "llm" = AI生成
+  comment_mode: "template"
+  comment_templates:
+    - "感谢分享，想了解更详细的安排！"
+    - "楼主怎么收费呢？可以私信吗~"
+    - "马克一下，近期有出行计划！"
+    - "刚好需要，求联系方式~"
+    - "想问问有推荐的路线吗？"
+  # LLM配置（comment_mode="llm" 时生效）
+  llm_endpoint: ""
+  llm_api_key: ""                 # 建议通过环境变量 AE_LLM_API_KEY 注入
+  llm_model: "gpt-4o-mini"
+  llm_prompt_template: >
+    你是一个真实的小红书用户，正在浏览关于{keyword}的帖子。
+    帖子内容：{content}。
+    请生成一条自然、口语化的评论（15-30字），表达兴趣并引导私信联系。
+    不要使用emoji，不要太正式。
+  # ========== 行为伪装 ==========
+  browse_before_comment_min: 5
+  browse_before_comment_max: 10
+  live_mode: false                # false=试运行, true=真实发送
+  # ========== 去重 ==========
+  enable_dedup: true
+  dedup_record_file: ""           # 空=自动(data/commented_posts.json)
+
+schedule:
+  enabled: false
+  active_hours_start: 8
+  active_hours_end: 23
+  # "farm_then_intercept" | "intercept_only" | "farm_only" | "mixed"
+  run_mode: "farm_then_intercept"
+  warmup_farm_minutes: 30

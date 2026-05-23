@@ -1,280 +1,289 @@
 """
-XHS Mobile Driver V2 - Industrial Grade Refactor
-Implements decoupled OCR, State Machine architecture, robust logging, and probability farming funnel.
+XHS Mobile Driver V2 - Industrial Grade CLI Entry Point
+支持: 真机初始化 | 养号 | 话题截流 | 全自动(养号+截流) | 扫描 | 提取 | 回复
+
+所有参数均通过 config.yaml + 环境变量配置，CLI仅提供 action 选择和必要覆盖。
 """
 import argparse
 import sys
 import os
 import json
-import random
+
+# 确保 automation_engine 为 Python 路径
+sys.path.insert(0, os.path.dirname(__file__))
+
+from config import load_config
 from mobile_core.logger import get_logger
-from mobile_core.device_driver import DeviceDriver
-from mobile_core.agentless_driver import AgentlessMinitouchDriver
-from mobile_core.keyboard_vision import KeyboardVisionTyping
-from mobile_core.vision import VisionEngine
-from mobile_core.watchdog import PopupWatchdog
-from mobile_core.state_machine import StateMachineExecutor
-from mobile_core.ocr_client import OCRClient
 
 logger = get_logger("main")
 
-class XHSBusinessFlows:
-    def __init__(self, device_serial, use_agentless=False, typing_mode="clipboard"):
-        self.typing_mode = typing_mode
-        self.use_agentless = use_agentless
-        if use_agentless:
-            self.driver = AgentlessMinitouchDriver(device_serial)
-        else:
-            self.driver = DeviceDriver(device_serial)
-            
-        templates_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates")
-        self.vision = VisionEngine(templates_dir)
-        self.watchdog = PopupWatchdog(self.vision, self.driver)
-        self.fsm = StateMachineExecutor(self.driver, self.watchdog)
-        self.ocr = OCRClient() # Connects to decoupled FastAPI microservice
-        self.keyboard = KeyboardVisionTyping(self.driver, self.vision, self.ocr)
 
-    # --- STATE FUNCTIONS ---
-    
-    def state_feed_scan(self):
-        """State: Scanning the feed."""
-        self.driver.ensure_app_foreground()
-        logger.info("Scanning for posts on feed...")
-        self.driver.human_swipe("down")
-        
-        img = self.driver.screenshot()
-        cards = self.vision.detect_cards_waterfall(img)
-        
-        # Grid fallback if no cards detected dynamically
-        if not cards:
-            w, h = 1080, 1920
-            if hasattr(self.driver, "d"):
-                w, h = self.driver.d.window_size()
-            cards = [
-                {"id": 0, "title": "CV_Post_TopLeft", "x": int(w * 0.25), "y": int(h * 0.35)},
-                {"id": 1, "title": "CV_Post_TopRight", "x": int(w * 0.75), "y": int(h * 0.35)},
-                {"id": 2, "title": "CV_Post_BotLeft", "x": int(w * 0.25), "y": int(h * 0.75)},
-                {"id": 3, "title": "CV_Post_BotRight", "x": int(w * 0.75), "y": int(h * 0.75)}
-            ]
-        
-        print("\n--- VISIBLE POSTS (GRID-BASED) ---")
-        print(json.dumps(cards, ensure_ascii=False, indent=2))
-        print("----------------------------\n")
-        
-        logger.info("Feed scan complete.")
-        return None # End of flow
+def _build_driver(config):
+    """根据配置构建设备驱动"""
+    if config.device.use_agentless:
+        from mobile_core.agentless_driver import AgentlessMinitouchDriver
+        return AgentlessMinitouchDriver(config.device.serial)
+    else:
+        from mobile_core.device_driver import DeviceDriver
+        return DeviceDriver(config.device.serial)
 
-    def state_post_extract(self, target_x, target_y):
-        """State: Extracting data from a post."""
-        self.driver.ensure_app_foreground()
-        logger.info(f"Tapping post at ({target_x}, {target_y})")
-        self.driver.physical_tap(target_x, target_y)
-        self.driver.human_sleep(4.0, 1.0)
-        
-        # 1. OCR for post description
-        img = self.driver.screenshot()
-        post_desc = []
-        try:
-            ocr_res = self.ocr.ocr_image(img)
-            post_desc = [line[1][0] for line in ocr_res if line[1][1] > 0.6]
-            logger.info("Post description extracted")
-        except Exception as e:
-            logger.error("Post OCR Extraction failed", extra={"error": str(e)})
-            
-        # 2. Scroll to load comments
-        logger.info("Scrolling to load comments...")
-        self.driver.human_swipe("down")
-        self.driver.human_swipe("down")
-        self.driver.human_sleep(2.0, 1.0)
-        
-        # 3. OCR for comments
-        img_comments = self.driver.screenshot()
-        comments = []
-        try:
-            ocr_res2 = self.ocr.ocr_image(img_comments)
-            reply_btn = self.vision.find_template(img_comments, "reply_button", threshold=0.8)
-            
-            for i, line in enumerate(ocr_res2):
-                box, (text, conf) = line
-                if conf > 0.6 and len(text) > 2 and "回复" not in text:
-                    comments.append({
-                        "id": i,
-                        "author": "OCR_User",
-                        "content": text,
-                        "reply_x": reply_btn["x"] if reply_btn else 0,
-                        "reply_y": reply_btn["y"] if reply_btn else 0
-                    })
-            logger.info("Comments extracted")
-        except Exception as e:
-            logger.error("Comments OCR Extraction failed", extra={"error": str(e)})
 
-        # Output JSON result for orchestrator integration
-        output_data = {
-            "description": post_desc,
-            "comments": comments
-        }
-        print("\n--- EXTRACTED DATA (JSON) ---")
-        print(json.dumps(output_data, ensure_ascii=False, indent=2))
-        print("-----------------------------\n")
-        
-        return None # End of flow
-        
-    def state_post_reply(self, target_x, target_y, text, live_mode=False, should_close=False):
-        """State: Reply to a post with physical or clipboard typing."""
-        self.driver.ensure_app_foreground()
-        
-        logger.info(f"Tapping reply box at ({target_x}, {target_y})")
-        self.driver.physical_tap(target_x, target_y)
-        self.driver.human_sleep(2.0, 1.0)
-        
-        logger.info(f"Typing text: '{text}' using mode: {self.typing_mode}")
-        if self.typing_mode == "clipboard" and hasattr(self.driver, "d"):
-            self.driver.d.set_clipboard(text)
-            self.driver.human_sleep(1.0, 0.5)
-            self.driver.d.send_keys(text, clear=True)
-            self.driver.human_sleep(1.5, 0.5)
-        else:
-            self.keyboard.type_chinese(text)
-            
-        if live_mode:
-            logger.info("LIVE MODE: Clicking '发送' (Send)...")
-            img = self.driver.screenshot()
-            send_btn = self.vision.find_template(img, "send_button", threshold=0.75)
-            if send_btn:
-                self.driver.physical_tap(send_btn['x'], send_btn['y'])
-                logger.info("Waiting 4s for network response...")
-                self.driver.human_sleep(4.0, 1.0)
-                
-                # Check success via OCR
-                logger.info("Verifying comment via OCR...")
-                verify_img = self.driver.screenshot()
-                try:
-                    ocr_res = self.ocr.ocr_image(verify_img)
-                    success = False
-                    for line in ocr_res:
-                        text_val = line[1][0]
-                        if text[:4] in text_val: # Check first 4 chars
-                            success = True
-                            break
-                    if success:
-                        logger.info("Comment verified as successfully posted in UI!")
-                    else:
-                        logger.warning("Comment not found via OCR. May be shadowbanned or network failed.")
-                except Exception as e:
-                    logger.error("OCR Verification failed", extra={"error": str(e)})
-                
-                logger.info("Entering mandatory cooldown after comment to prevent high-frequency risk.")
-                self.driver.human_sleep(90.0, 30.0) # 1~2 minutes delay
-            else:
-                logger.error("Could not find send button!")
-        else:
-            logger.info("DRY RUN: Cancelling comment...")
-            self.driver.press_back()
-            self.driver.human_sleep(1.0, 0.5)
-            self.driver.press_back()
+def _build_components(config):
+    """构建所有核心组件"""
+    driver = _build_driver(config)
 
-        if should_close:
-            logger.info("Closing overlay (Pressing Back)...")
-            self.driver.press_back()
-            self.driver.human_sleep(1.5, 0.5)
-            
-        return None # End of flow
-        
-    def state_farming_loop(self, current_step=0, target_steps=50):
-        """State: Farm loop with probability funnel."""
-        if current_step >= target_steps:
-            logger.info("Farming session complete.")
-            return None
-            
-        logger.info(f"Farming Step {current_step+1}/{target_steps}")
-        self.driver.human_swipe("down")
-        self.driver.human_sleep(4.0, 2.0)
-        
-        # 30% chance to click into a post
-        if random.random() < 0.30:
-            logger.info("Funnel: 30% chance triggered! Transitioning to read post...")
-            return lambda: self.state_farming_read_post(current_step, target_steps)
-            
-        return lambda: self.state_farming_loop(current_step + 1, target_steps)
+    from mobile_core.vision import VisionEngine
+    from mobile_core.ocr_client import OCRClient
+    from mobile_core.keyboard_vision import KeyboardVisionTyping
+    from mobile_core.watchdog import PopupWatchdog
+    from mobile_core.navigator import XHSNavigator
+    from mobile_core.searcher import XHSSearcher
+    from mobile_core.reader import PostReader
+    from mobile_core.commenter import SmartCommenter
+    from mobile_core.farmer import AccountFarmer
 
-    def state_farming_read_post(self, current_step, target_steps):
-        """State: Pretend to read a post during farming."""
-        img = self.driver.screenshot()
-        cards = self.vision.detect_cards_waterfall(img)
-        if cards:
-            card = random.choice(cards)
-            logger.info(f"Farming: Clicking into detected post card at ({card['x']}, {card['y']})")
-            self.driver.physical_tap(card['x'], card['y'])
-        else:
-            # Grid heuristic fallback
-            w, h = 1080, 1920
-            if hasattr(self.driver, "d"):
-                w, h = self.driver.d.window_size()
-            tx = random.choice([int(w * 0.25), int(w * 0.75)])
-            ty = random.randint(int(h * 0.3), int(h * 0.8))
-            logger.info(f"Farming: Fallback click at ({tx}, {ty})")
-            self.driver.physical_tap(tx, ty)
-            
-        self.driver.human_sleep(10.0, 4.0) # Long read simulation
-        
-        # 33% chance to open comments
-        if random.random() < 0.33:
-            logger.info("Farming: Opening comments...")
-            self.driver.human_swipe("down")
-            self.driver.human_sleep(5.0, 2.0)
-            
-        logger.info("Farming: Exiting post...")
-        self.driver.press_back()
-        self.driver.human_sleep(1.5, 0.5)
-        
-        return lambda: self.state_farming_loop(current_step + 1, target_steps)
+    vision = VisionEngine(config.vision.templates_dir)
+    ocr = OCRClient(config.ocr.endpoint, config.ocr.timeout)
+    keyboard = KeyboardVisionTyping(driver, vision, ocr)
+    watchdog = PopupWatchdog(vision, driver)
+    navigator = XHSNavigator(driver, vision, ocr, config)
+    searcher = XHSSearcher(driver, vision, ocr, keyboard, navigator, config)
+    reader = PostReader(driver, vision, ocr, config)
+    commenter = SmartCommenter(driver, vision, ocr, keyboard, config)
+    farmer = AccountFarmer(driver, vision, ocr, navigator, reader, config)
 
-    # --- ENTRY POINTS ---
-    def run_scan(self):
-        self.fsm.execute(self.state_feed_scan)
-        
-    def run_extract(self, x, y):
-        self.fsm.execute(self.state_post_extract, x, y)
-        
-    def run_reply(self, x, y, text, live_mode=False, should_close=False):
-        self.fsm.execute(self.state_post_reply, x, y, text, live_mode, should_close)
-        
-    def run_farm(self):
-        self.fsm.execute(self.state_farming_loop, 0, 50)
+    return {
+        "driver": driver, "vision": vision, "ocr": ocr,
+        "keyboard": keyboard, "watchdog": watchdog,
+        "navigator": navigator, "searcher": searcher,
+        "reader": reader, "commenter": commenter, "farmer": farmer,
+    }
+
+
+def action_init(config):
+    """真机初始化"""
+    from flows.init_flow import InitOrchestrator
+    orchestrator = InitOrchestrator(config)
+    report = orchestrator.run(config.device.serial)
+    print("\n--- INIT REPORT ---")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+    print("-------------------\n")
+    return report
+
+
+def action_farm(config):
+    """养号模式"""
+    components = _build_components(config)
+    from flows.farm_flow import FarmOrchestrator
+    orchestrator = FarmOrchestrator(components["farmer"], config)
+    orchestrator.run()
+
+
+def action_intercept(config):
+    """话题搜索评论截流"""
+    components = _build_components(config)
+    from flows.intercept_flow import InterceptOrchestrator
+    orchestrator = InterceptOrchestrator(
+        navigator=components["navigator"],
+        searcher=components["searcher"],
+        reader=components["reader"],
+        commenter=components["commenter"],
+        farmer=components["farmer"],
+        driver=components["driver"],
+        config=config,
+    )
+    orchestrator.run()
+
+
+def action_auto(config):
+    """全自动模式: 根据 schedule.run_mode 配置执行"""
+    mode = config.schedule.run_mode
+    logger.info(f"Auto mode: {mode}")
+
+    if mode == "farm_only":
+        action_farm(config)
+    elif mode == "intercept_only":
+        action_intercept(config)
+    elif mode == "farm_then_intercept":
+        logger.info(f"Warming up with {config.schedule.warmup_farm_minutes} min farming...")
+        # 先养号热身
+        components = _build_components(config)
+        from flows.farm_flow import FarmOrchestrator
+        farm_orch = FarmOrchestrator(components["farmer"], config)
+        farm_orch.run(config.schedule.warmup_farm_minutes)
+
+        # 再截流
+        from flows.intercept_flow import InterceptOrchestrator
+        intercept_orch = InterceptOrchestrator(
+            navigator=components["navigator"],
+            searcher=components["searcher"],
+            reader=components["reader"],
+            commenter=components["commenter"],
+            farmer=components["farmer"],
+            driver=components["driver"],
+            config=config,
+        )
+        intercept_orch.run()
+    elif mode == "mixed":
+        # 交替执行：养号一轮 → 截流一个关键词 → 养号 → ...
+        components = _build_components(config)
+        from mobile_core.farmer import AccountFarmer
+        from flows.intercept_flow import InterceptOrchestrator
+
+        for keyword in config.intercept.keywords:
+            # 养号热身
+            components["farmer"].run_session(duration_minutes=10)
+            # 截流单个关键词
+            single_config = config
+            single_config.intercept.keywords = [keyword]
+            intercept_orch = InterceptOrchestrator(
+                navigator=components["navigator"],
+                searcher=components["searcher"],
+                reader=components["reader"],
+                commenter=components["commenter"],
+                farmer=components["farmer"],
+                driver=components["driver"],
+                config=single_config,
+            )
+            intercept_orch.run()
+    else:
+        logger.error(f"Unknown run_mode: {mode}")
+
+
+def action_scan(config):
+    """信息流扫描（保留原始功能）"""
+    components = _build_components(config)
+    driver = components["driver"]
+    vision = components["vision"]
+
+    driver.ensure_app_foreground()
+    logger.info("Scanning feed...")
+    driver.human_swipe("down")
+
+    img = driver.screenshot()
+    cards = vision.detect_cards_waterfall(img)
+
+    if not cards:
+        w, h = config.device.screen_width, config.device.screen_height
+        cards = [
+            {"id": 0, "title": "Grid_TopLeft", "x": int(w*0.25), "y": int(h*0.35)},
+            {"id": 1, "title": "Grid_TopRight", "x": int(w*0.75), "y": int(h*0.35)},
+            {"id": 2, "title": "Grid_BotLeft", "x": int(w*0.25), "y": int(h*0.75)},
+            {"id": 3, "title": "Grid_BotRight", "x": int(w*0.75), "y": int(h*0.75)},
+        ]
+
+    print("\n--- VISIBLE POSTS ---")
+    print(json.dumps(cards, ensure_ascii=False, indent=2))
+    print("---------------------\n")
+
+
+def action_extract(config, x, y):
+    """提取帖子内容"""
+    components = _build_components(config)
+    result = components["reader"].enter_and_extract(x, y)
+    print("\n--- EXTRACTED DATA ---")
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    print("----------------------\n")
+
+
+def action_reply(config, x, y, text, live):
+    """回复评论"""
+    components = _build_components(config)
+    components["commenter"].post_comment(x, y, text, live=live)
+
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="XHS Android Automation Driver V2")
-    parser.add_argument("--device", type=str, help="ADB Serial or IP address of the device")
-    parser.add_argument("--action", required=True, choices=["scan", "extract", "reply", "farm"], help="Action")
-    parser.add_argument("--typing-mode", choices=["clipboard", "opencv"], default="clipboard", help="How to input text")
-    parser.add_argument("--x", type=int, help="X coordinate for clicking")
-    parser.add_argument("--y", type=int, help="Y coordinate for clicking")
-    parser.add_argument("--text", type=str, help="Text to type")
-    parser.add_argument("--live", action="store_true", help="If set, actually clicks the send button.")
-    parser.add_argument("--close", action="store_true", help="If set, clicks Android back button to close post.")
-    parser.add_argument("--agentless", action="store_true", help="Use Phase 3 Minitouch/ADB Agentless Driver")
+    parser = argparse.ArgumentParser(
+        description="XHS Android Automation Driver V2 - Industrial Grade",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument(
+        "--action", required=True,
+        choices=["init", "farm", "intercept", "auto", "scan", "extract", "reply"],
+        help=(
+            "init       - 真机一键初始化（关闭动画/采集模板/检测登录）\n"
+            "farm       - 自动养号（浏览/点赞/收藏/搜索）\n"
+            "intercept  - 话题搜索评论截流\n"
+            "auto       - 全自动（根据 schedule.run_mode 配置执行）\n"
+            "scan       - 信息流扫描\n"
+            "extract    - 提取指定帖子内容\n"
+            "reply      - 回复指定坐标"
+        )
+    )
+    # CLI 覆盖参数（均为可选，不传则使用 config.yaml）
+    parser.add_argument("--device", type=str, help="覆盖 ADB 设备序列号")
+    parser.add_argument("--agentless", action="store_true", default=None,
+                        help="强制使用无代理模式")
+    parser.add_argument("--typing-mode", choices=["clipboard", "opencv"],
+                        help="覆盖打字模式")
+    parser.add_argument("--live", action="store_true", default=None,
+                        help="覆盖为真实发送模式")
+    parser.add_argument("--keywords", nargs="+", help="覆盖截流关键词")
+    parser.add_argument("--comment-mode", choices=["template", "contextual", "llm"],
+                        help="覆盖评论生成模式")
+    parser.add_argument("--run-mode",
+                        choices=["farm_then_intercept", "intercept_only",
+                                 "farm_only", "mixed"],
+                        help="覆盖 auto 模式的运行策略")
+    parser.add_argument("--farm-duration", type=int, help="覆盖养号时长(分钟)")
+    # 传统参数（extract/reply 专用）
+    parser.add_argument("--x", type=int, help="X坐标")
+    parser.add_argument("--y", type=int, help="Y坐标")
+    parser.add_argument("--text", type=str, help="评论文本")
+
     return parser.parse_args()
+
 
 def main():
     args = parse_args()
-    logger.info(f"Starting XHS Mobile Driver V2", extra={"action": args.action, "device": args.device})
-    
-    app = XHSBusinessFlows(args.device, use_agentless=args.agentless, typing_mode=args.typing_mode)
-    
-    if args.action == "scan":
-        app.run_scan()
+
+    # 加载配置
+    config = load_config()
+
+    # CLI 参数覆盖 config
+    if args.device:
+        config.device.serial = args.device
+    if args.agentless is not None:
+        config.device.use_agentless = args.agentless
+    if args.typing_mode:
+        config.device.typing_mode = args.typing_mode
+    if args.live is not None:
+        config.intercept.live_mode = args.live
+    if args.keywords:
+        config.intercept.keywords = args.keywords
+    if args.comment_mode:
+        config.intercept.comment_mode = args.comment_mode
+    if args.run_mode:
+        config.schedule.run_mode = args.run_mode
+    if args.farm_duration:
+        config.farm.session_duration_minutes = args.farm_duration
+
+    logger.info(f"Starting XHS Driver V2",
+                extra={"action": args.action, "device": config.device.serial})
+
+    # 路由到对应 action
+    if args.action == "init":
+        action_init(config)
     elif args.action == "farm":
-        app.run_farm()
+        action_farm(config)
+    elif args.action == "intercept":
+        action_intercept(config)
+    elif args.action == "auto":
+        action_auto(config)
+    elif args.action == "scan":
+        action_scan(config)
     elif args.action == "extract":
         if args.x is None or args.y is None:
             logger.error("--x and --y required for extract")
             sys.exit(1)
-        app.run_extract(args.x, args.y)
+        action_extract(config, args.x, args.y)
     elif args.action == "reply":
         if args.x is None or args.y is None or not args.text:
             logger.error("--x, --y, and --text required for reply")
             sys.exit(1)
-        app.run_reply(args.x, args.y, args.text, args.live, args.close)
+        action_reply(config, args.x, args.y, args.text,
+                     args.live or config.intercept.live_mode)
+
 
 if __name__ == "__main__":
     main()
