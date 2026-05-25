@@ -6,11 +6,11 @@
 device:
   serial: null                    # ADB设备序列号，null=自动检测
   use_agentless: true             # true=无代理模式(生产), false=uiautomator2(调试)
-  screen_width: 1080
-  screen_height: 1920
-  typing_mode: "clipboard"        # "clipboard" | "opencv"(纯视觉打字)
+  screen_width: 0                 # 0=自动检测（初始化时 wm size 动态获取）
+  screen_height: 0                # 0=自动检测（初始化时 wm size 动态获取）
+  typing_mode: "vision"           # 强制使用纯视觉打字，避免暴露剪贴板 agent
   # 初始化开关
-  auto_disable_animations: true
+  auto_disable_animations: false  # 设为 false，保留正常系统动画以躲避风控检测
   auto_keep_screen_on: true
   auto_rotate_ip_on_init: true
   auto_crop_templates_on_init: true
@@ -93,14 +93,14 @@ intercept:
     - "约"
   max_search_pages: 3
   # ========== 评论生成 ==========
-  # "template" = 模板随机 | "contextual" = 基于标题匹配模板 | "llm" = AI生成
-  comment_mode: "template"
+  # "template" = 模板随机(支持Spintax) | "contextual" = 基于标题匹配模板 | "llm" = AI生成
+  comment_mode: "llm"             # 默认启用 LLM 降低文本重复率
   comment_templates:
-    - "感谢分享，想了解更详细的安排！"
-    - "楼主怎么收费呢？可以私信吗~"
-    - "马克一下，近期有出行计划！"
-    - "刚好需要，求联系方式~"
-    - "想问问有推荐的路线吗？"
+    - "{感谢分享|太赞了|很有帮助}，{想了解|求问|请教下}更详细的安排！"
+    - "楼主{怎么收费呢|价格多少|怎么算}？{可以私信吗|求私信|麻烦私}～"
+    - "{马克一下|先收藏了|赞}，{近期|下周|马上}有出行计划！"
+    - "{刚好需要|正好在找这个|绝了}，{求联系方式|怎么联系|求带}～"
+    - "{想问问|请教一下|弱弱问句}{有推荐的路线吗|路线怎么安排合适}？"
   # LLM配置（comment_mode="llm" 时生效）
   llm_endpoint: ""
   llm_api_key: ""                 # 建议通过环境变量 AE_LLM_API_KEY 注入
@@ -111,8 +111,8 @@ intercept:
     请生成一条自然、口语化的评论（15-30字），表达兴趣并引导私信联系。
     不要使用emoji，不要太正式。
   # ========== 行为伪装 ==========
-  browse_before_comment_min: 5
-  browse_before_comment_max: 10
+  browse_before_comment_min: 0    # 改为0，增加时序随机性
+  browse_before_comment_max: 8
   live_mode: false                # false=试运行, true=真实发送
   # ========== 去重 ==========
   enable_dedup: true

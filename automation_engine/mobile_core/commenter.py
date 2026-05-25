@@ -6,6 +6,7 @@
 import json
 import os
 import random
+import re
 import time
 import requests
 from .logger import get_logger
@@ -43,9 +44,18 @@ class SmartCommenter:
         if mode == "llm" and self.config.intercept.llm_api_key:
             return self._generate_llm_comment(post_context, keyword)
         elif mode == "contextual" and post_context:
-            return self._generate_contextual_comment(post_context, templates)
+            tpl = self._generate_contextual_comment(post_context, templates)
+            return self._parse_spintax(tpl)
         else:
-            return random.choice(templates)
+            tpl = random.choice(templates)
+            return self._parse_spintax(tpl)
+
+    def _parse_spintax(self, text: str) -> str:
+        """解析 Spintax 格式，例如 '{你好|哈喽}，{想问下|请问}'"""
+        pattern = re.compile(r'\{([^{}]+)\}')
+        while pattern.search(text):
+            text = pattern.sub(lambda m: random.choice(m.group(1).split('|')), text, count=1)
+        return text
 
     def _generate_contextual_comment(self, post_context: dict, templates: list) -> str:
         """基于帖子内容关键词匹配最相关的模板"""
@@ -115,9 +125,14 @@ class SmartCommenter:
 
         # 输入文本
         logger.info(f"Typing: '{text}' (mode: {self.config.device.typing_mode})")
-        if self.config.device.typing_mode == "clipboard" and hasattr(self.driver, "d"):
-            self.driver.d.set_clipboard(text)
-            self.driver.d.send_keys(text, clear=True)
+        if self.config.device.typing_mode == "clipboard":
+            # Agentless clipboard hack via ADB broadcast (requires Clipper) or standard text
+            logger.info("Using ADB text input fallback for clipboard mode")
+            # Encode base64 to avoid shell escaping issues if needed, or use simple input text
+            # Note: adb shell input text doesn't support Chinese natively without ADBKeyboard.
+            # We fallback to pure vision keyboard or ADBKeyboard broadcast.
+            import subprocess
+            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{text}'"])
             self.driver.human_sleep(1.5, 0.5)
         else:
             self.keyboard.type_chinese(text)

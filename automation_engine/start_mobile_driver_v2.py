@@ -5,9 +5,11 @@ XHS Mobile Driver V2 - Industrial Grade CLI Entry Point
 所有参数均通过 config.yaml + 环境变量配置，CLI仅提供 action 选择和必要覆盖。
 """
 import argparse
+import copy
 import sys
 import os
 import json
+from datetime import datetime
 
 # 确保 automation_engine 为 Python 路径
 sys.path.insert(0, os.path.dirname(__file__))
@@ -42,8 +44,24 @@ def _build_components(config):
     from mobile_core.commenter import SmartCommenter
     from mobile_core.farmer import AccountFarmer
 
+    # Update template dir to be resolution-aware
+    try:
+        img = driver.screenshot()
+        h, w = img.shape[:2]
+        resolution_folder = f"{w}x{h}"
+        if not config.vision.templates_dir.endswith(resolution_folder):
+            config.vision.templates_dir = os.path.join(config.vision.templates_dir, resolution_folder)
+            os.makedirs(config.vision.templates_dir, exist_ok=True)
+    except Exception as e:
+        logger.warning(f"Could not determine resolution for template dir: {e}")
+
     vision = VisionEngine(config.vision.templates_dir)
-    ocr = OCRClient(config.ocr.endpoint, config.ocr.timeout)
+    ocr = OCRClient(
+        endpoint=config.ocr.endpoint,
+        timeout=config.ocr.timeout,
+        circuit_breaker_threshold=config.ocr.circuit_breaker_threshold,
+        circuit_breaker_cooldown=config.ocr.circuit_breaker_cooldown,
+    )
     keyboard = KeyboardVisionTyping(driver, vision, ocr)
     watchdog = PopupWatchdog(vision, driver)
     navigator = XHSNavigator(driver, vision, ocr, config)
@@ -61,8 +79,9 @@ def _build_components(config):
 
 
 def action_init(config):
-    """真机初始化"""
+    """真机初始化 — 不预构建组件，避免提前安装 u2 agent"""
     from flows.init_flow import InitOrchestrator
+
     orchestrator = InitOrchestrator(config)
     report = orchestrator.run(config.device.serial)
     print("\n--- INIT REPORT ---")
@@ -90,15 +109,39 @@ def action_intercept(config):
         commenter=components["commenter"],
         farmer=components["farmer"],
         driver=components["driver"],
+        watchdog=components["watchdog"],
         config=config,
     )
     orchestrator.run()
+
+
+def _check_active_hours(config) -> bool:
+    """检查当前时间是否在配置的活跃时段内"""
+    if not config.schedule.enabled:
+        return True  # 调度未启用时不做限制
+    now_hour = datetime.now().hour
+    start = config.schedule.active_hours_start
+    end = config.schedule.active_hours_end
+    if start <= end:
+        return start <= now_hour < end
+    else:
+        # 跨午夜场景（如 22:00 - 06:00）
+        return now_hour >= start or now_hour < end
 
 
 def action_auto(config):
     """全自动模式: 根据 schedule.run_mode 配置执行"""
     mode = config.schedule.run_mode
     logger.info(f"Auto mode: {mode}")
+
+    # 活跃时段校验
+    if not _check_active_hours(config):
+        now_hour = datetime.now().hour
+        logger.info(
+            f"Outside active hours ({config.schedule.active_hours_start}:00-"
+            f"{config.schedule.active_hours_end}:00). Current hour: {now_hour}. Skipping."
+        )
+        return
 
     if mode == "farm_only":
         action_farm(config)
@@ -121,20 +164,22 @@ def action_auto(config):
             commenter=components["commenter"],
             farmer=components["farmer"],
             driver=components["driver"],
+            watchdog=components["watchdog"],
             config=config,
         )
         intercept_orch.run()
     elif mode == "mixed":
         # 交替执行：养号一轮 → 截流一个关键词 → 养号 → ...
         components = _build_components(config)
-        from mobile_core.farmer import AccountFarmer
         from flows.intercept_flow import InterceptOrchestrator
 
-        for keyword in config.intercept.keywords:
+        # 保存原始关键词列表，避免修改共享引用
+        all_keywords = list(config.intercept.keywords)
+        for keyword in all_keywords:
             # 养号热身
             components["farmer"].run_session(duration_minutes=10)
-            # 截流单个关键词
-            single_config = config
+            # 截流单个关键词（deepcopy 避免污染原始 config）
+            single_config = copy.deepcopy(config)
             single_config.intercept.keywords = [keyword]
             intercept_orch = InterceptOrchestrator(
                 navigator=components["navigator"],
@@ -143,6 +188,7 @@ def action_auto(config):
                 commenter=components["commenter"],
                 farmer=components["farmer"],
                 driver=components["driver"],
+                watchdog=components["watchdog"],
                 config=single_config,
             )
             intercept_orch.run()

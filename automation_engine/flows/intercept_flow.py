@@ -1,10 +1,12 @@
 """
 话题搜索评论截流编排器
 核心 Pipeline: 搜索话题 → 筛选帖子 → 伪装浏览 → 智能评论 → 冷却循环
+集成 PopupWatchdog：每次关键操作前扫描屏幕，自动处理弹窗/风控。
 """
 import random
 import json
 from mobile_core.logger import get_logger
+from mobile_core.exceptions import RiskControlTriggered, PopupIntercepted
 
 logger = get_logger("intercept_flow")
 
@@ -13,10 +15,11 @@ class InterceptOrchestrator:
     """
     话题评论截流 - 完整 Pipeline 编排。
     所有行为参数均从 config 读取。
+    集成 Watchdog 监控弹窗/风控，保障生产环境不因弹窗阻塞。
     """
 
     def __init__(self, navigator, searcher, reader, commenter, farmer,
-                 driver, config):
+                 driver, config, watchdog=None):
         self.navigator = navigator
         self.searcher = searcher
         self.reader = reader
@@ -24,6 +27,24 @@ class InterceptOrchestrator:
         self.farmer = farmer
         self.driver = driver
         self.config = config
+        self.watchdog = watchdog
+
+    def _safe_screen_check(self) -> bool:
+        """
+        执行屏幕安全检查（弹窗/风控检测）。
+        返回 True 表示安全，False 表示发生了弹窗（已自动处理，需刷新状态）。
+        RiskControlTriggered 会直接向上抛出，中止整个流程。
+        """
+        if not self.watchdog:
+            return True
+        try:
+            img = self.driver.screenshot()
+            self.watchdog.check_screen(img)
+            return True
+        except PopupIntercepted as e:
+            logger.warning(f"Popup intercepted and dismissed: {e}")
+            return False  # 调用方需刷新状态后重试
+        # RiskControlTriggered 不在这里捕获，让它冒泡到 run()
 
     def run(self):
         """
@@ -43,104 +64,139 @@ class InterceptOrchestrator:
         total_comments = 0
         comment_since_ip_rotate = 0
 
-        for keyword in keywords:
-            if not self.commenter.check_quota():
-                logger.warning("Daily quota exhausted. Stopping intercept.")
-                break
-
-            logger.info(f"=== Processing keyword: '{keyword}' ===")
-
-            # 1. 搜索
-            posts = self.searcher.search_keyword(keyword)
-            if not posts:
-                logger.warning(f"No posts found for '{keyword}', skipping.")
-                continue
-
-            # 2. 翻页收集更多结果
-            if cfg.max_search_pages > 1:
-                more = self.searcher.scroll_and_collect(cfg.max_search_pages - 1)
-                posts.extend(more)
-
-            # 3. 过滤
-            targets = self.searcher.filter_by_keywords(posts, cfg.title_filter_keywords)
-            if not targets:
-                logger.info(f"No matching posts for '{keyword}' after filtering.")
-                self.navigator.go_home()
-                continue
-
-            logger.info(f"Found {len(targets)} target posts for '{keyword}'")
-
-            # 4. 对每个目标帖子执行截流
-            for i, target in enumerate(targets):
+        try:
+            for keyword in keywords:
                 if not self.commenter.check_quota():
+                    logger.warning("Daily quota exhausted. Stopping intercept.")
                     break
 
-                post_id = f"{keyword}_{target.get('title', '')[:20]}_{target['x']}_{target['y']}"
+                logger.info(f"=== Processing keyword: '{keyword}' ===")
 
-                # 去重检查
-                if self.commenter.check_duplicate(post_id):
-                    logger.info(f"Post already commented, skipping: {post_id}")
+                # Watchdog: 搜索前检查
+                self._safe_screen_check()
+
+                # 1. 搜索
+                posts = self.searcher.search_keyword(keyword)
+                if not posts:
+                    logger.warning(f"No posts found for '{keyword}', skipping.")
                     continue
 
-                # 4a. 伪装浏览（每次评论前先浏览几个无关帖子）
-                browse_count = random.randint(
-                    cfg.browse_before_comment_min,
-                    cfg.browse_before_comment_max
-                )
-                logger.info(f"Browsing {browse_count} posts before commenting (camouflage)...")
-                self._camouflage_browse(browse_count)
+                # 2. 翻页收集更多结果
+                if cfg.max_search_pages > 1:
+                    more = self.searcher.scroll_and_collect(cfg.max_search_pages - 1)
+                    posts.extend(more)
 
-                # 4b. 回到搜索结果（重新搜索同一关键词）
-                if i > 0:
-                    posts_refreshed = self.searcher.search_keyword(keyword)
-                    targets_refreshed = self.searcher.filter_by_keywords(
-                        posts_refreshed, cfg.title_filter_keywords
-                    )
-                    # 尝试在新结果中找到相同帖子
-                    match = self._find_matching_post(target, targets_refreshed)
-                    if match:
-                        target = match
-                    else:
-                        logger.warning("Could not re-locate target post after camouflage. Skipping.")
+                # 3. 过滤
+                targets = self.searcher.filter_by_keywords(posts, cfg.title_filter_keywords)
+                if not targets:
+                    logger.info(f"No matching posts for '{keyword}' after filtering.")
+                    self.navigator.go_home()
+                    continue
+
+                logger.info(f"Found {len(targets)} target posts for '{keyword}'")
+
+                # 4. 对每个目标帖子执行截流
+                for i, target in enumerate(targets):
+                    if not self.commenter.check_quota():
+                        break
+
+                    import hashlib
+                    title_hash = hashlib.md5(target.get('title', '').encode('utf-8')).hexdigest()[:8]
+                    post_id = f"{keyword}_{title_hash}"
+
+                    # 去重检查
+                    if self.commenter.check_duplicate(post_id):
+                        logger.info(f"Post already commented, skipping: {post_id}")
                         continue
 
-                # 4c. 进入帖子 + 提取内容
-                post_data = self.reader.enter_and_extract(target['x'], target['y'])
+                    # 4a. 随机决定是在评论前伪装，还是直接进帖子（打乱行为序列）
+                    browse_before = random.choice([True, False])
+                    if browse_before:
+                        browse_count = random.randint(
+                            self.config.intercept.browse_before_comment_min,
+                            self.config.intercept.browse_before_comment_max
+                        )
+                        if browse_count > 0:
+                            logger.info(f"Browsing {browse_count} posts BEFORE commenting (camouflage)...")
+                            self._camouflage_browse(browse_count)
 
-                # 4d. 生成评论
-                comment_text = self.commenter.compose_comment(
-                    post_context=post_data,
-                    keyword=keyword
-                )
-                logger.info(f"Generated comment: '{comment_text}'")
+                        # 回到搜索结果（重新搜索同一关键词）
+                        if i > 0 or browse_count > 0:
+                            posts_refreshed = self.searcher.search_keyword(keyword)
+                            targets_refreshed = self.searcher.filter_by_keywords(
+                                posts_refreshed, cfg.title_filter_keywords
+                            )
+                            match = self._find_matching_post(target, targets_refreshed)
+                            if match:
+                                target = match
+                            else:
+                                logger.warning("Could not re-locate target post after camouflage. Skipping.")
+                                continue
 
-                # 4e. 定位回复输入框并评论
-                reply_x, reply_y = self._find_reply_target(post_data)
-                if reply_x == 0 and reply_y == 0:
-                    logger.warning("Could not locate reply button. Skipping this post.")
+                    # Watchdog: 进入帖子前检查
+                    self._safe_screen_check()
+
+                    # 4c. 进入帖子 + 提取内容
+                    post_data = self.reader.enter_and_extract(target['x'], target['y'])
+
+                    # Watchdog: 评论前检查
+                    if not self._safe_screen_check():
+                        # 弹窗已处理，但当前页面状态已变，安全起见跳过本帖
+                        logger.warning("Screen state changed after popup dismissal, skipping post.")
+                        self.navigator.go_back()
+                        continue
+
+                    # 4d. 生成评论
+                    comment_text = self.commenter.compose_comment(
+                        post_context=post_data,
+                        keyword=keyword
+                    )
+                    logger.info(f"Generated comment: '{comment_text}'")
+
+                    # 4e. 定位回复输入框并评论
+                    reply_x, reply_y = self._find_reply_target(post_data)
+                    if reply_x == 0 and reply_y == 0:
+                        logger.warning("Could not locate reply button. Skipping this post.")
+                        self.navigator.go_back()
+                        continue
+
+                    success = self.commenter.post_comment(reply_x, reply_y, comment_text)
+
+                    if success:
+                        total_comments += 1
+                        comment_since_ip_rotate += 1
+                        self.commenter.record_commented(post_id)
+
+                    # 4f. 退出帖子
                     self.navigator.go_back()
-                    continue
+                    self.driver.human_sleep(2.0, 1.0)
+                    
+                    # 4g. 随机决定是否在评论后进行伪装浏览
+                    if not browse_before:
+                        browse_count = random.randint(
+                            self.config.intercept.browse_before_comment_min,
+                            self.config.intercept.browse_before_comment_max
+                        )
+                        if browse_count > 0:
+                            logger.info(f"Browsing {browse_count} posts AFTER commenting (camouflage)...")
+                            self._camouflage_browse(browse_count)
+                            # 浏览后回到搜索页，准备下一个帖子
+                            self.searcher.search_keyword(keyword)
 
-                success = self.commenter.post_comment(reply_x, reply_y, comment_text)
+                    # 4g. 概率性 IP 轮换
+                    if comment_since_ip_rotate >= self.config.risk_control.ip_rotate_every_n_comments:
+                        logger.info("Rotating IP after N comments...")
+                        self._rotate_ip()
+                        comment_since_ip_rotate = 0
 
-                if success:
-                    total_comments += 1
-                    comment_since_ip_rotate += 1
-                    self.commenter.record_commented(post_id)
+                # 关键词处理完毕，回首页
+                self.navigator.go_home()
+                self.driver.human_sleep(3.0, 1.0)
 
-                # 4f. 退出帖子
-                self.navigator.go_back()
-                self.driver.human_sleep(2.0, 1.0)
-
-                # 4g. 概率性 IP 轮换
-                if comment_since_ip_rotate >= self.config.risk_control.ip_rotate_every_n_comments:
-                    logger.info("Rotating IP after N comments...")
-                    self._rotate_ip()
-                    comment_since_ip_rotate = 0
-
-            # 关键词处理完毕，回首页
-            self.navigator.go_home()
-            self.driver.human_sleep(3.0, 1.0)
+        except RiskControlTriggered as e:
+            logger.critical(f"🚨 RISK CONTROL TRIGGERED — halting intercept flow! {e}")
+            logger.critical("Manual intervention required. Device may be flagged.")
+            # 不再继续执行，保护账号
 
         logger.info(f"Intercept flow complete. Total comments: {total_comments}")
 
@@ -151,10 +207,12 @@ class InterceptOrchestrator:
             self.driver.human_swipe("down")
             self.driver.human_sleep(2.0, 1.0)
 
+            # Watchdog: 浏览中也可能弹窗
+            self._safe_screen_check()
+
             # 20% 概率点进去看看
             if random.random() < 0.2:
                 img = self.driver.screenshot()
-                cards = self.driver.__class__.__name__  # 仅用于判断类型
                 # 简单随机点击
                 w = self.config.device.screen_width
                 h = self.config.device.screen_height
@@ -173,11 +231,9 @@ class InterceptOrchestrator:
             return comments[0]["reply_x"], comments[0]["reply_y"]
 
         # Fallback: OCR 查找 "说点什么" / "写评论" 输入框
-        from mobile_core.ocr_client import OCRClient
         img = self.driver.screenshot()
-        ocr = OCRClient(self.config.ocr.endpoint)
         for hint in ["说点什么", "写评论", "友好评论"]:
-            matches = ocr.find_text(img, hint, conf_threshold=0.5)
+            matches = self.commenter.ocr.find_text(img, hint, conf_threshold=0.5)
             if matches:
                 return matches[0]["x"], matches[0]["y"]
 

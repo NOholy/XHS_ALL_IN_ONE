@@ -168,9 +168,11 @@ class AccountFarmer:
             self.driver.physical_tap(search_input['x'], search_input['y'])
             self.driver.human_sleep(1.0, 0.5)
 
-            if self.config.device.typing_mode == "clipboard" and hasattr(self.driver, "d"):
-                self.driver.d.set_clipboard(keyword)
-                self.driver.d.send_keys(keyword, clear=True)
+            if self.config.device.typing_mode == "clipboard":
+                import subprocess
+                subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{keyword}'"])
+            else:
+                self.keyboard.type_chinese(keyword)
             # 简单浏览一下搜索结果
             self.driver.human_sleep(3.0, 1.0)
             self.driver.human_swipe("down")
