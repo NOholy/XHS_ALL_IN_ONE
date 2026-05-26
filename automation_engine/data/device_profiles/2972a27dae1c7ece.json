@@ -1,0 +1,23 @@
+{
+  "serial": "2972a27dae1c7ece",
+  "steps": {
+    "pre_flight": "OK",
+    "adb_check": "OK",
+    "screen_resolution": "1440x2960",
+    "cleanup_u2": "OK",
+    "minitouch": "OK (ABI: arm64-v8a, minitouch socket connected)",
+    "disable_animations": "SKIPPED",
+    "keep_screen_on": "OK",
+    "xhs_installed": "OK",
+    "login_status": "LOGGED_IN",
+    "ip_rotation": "OK",
+    "template_crop": "OK"
+  },
+  "success": true,
+  "last_init_time": "2026-05-26T15:57:08.088722+00:00",
+  "screenshot_resolution": "1080x2220",
+  "physical_resolution": "1440x2960",
+  "android_version": "9",
+  "xhs_version": "9.31.2",
+  "abi": "arm64-v8a"
+}

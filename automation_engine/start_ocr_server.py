@@ -4,83 +4,144 @@ import base64
 import cv2
 import numpy as np
 import logging
-from paddleocr import PaddleOCR
+import os
+import threading
+from abc import ABC, abstractmethod
 
 # Configure simple logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("ocr_server")
-logging.getLogger("ppocr").setLevel(logging.ERROR)
 
 app = FastAPI(title="Industrial OCR Microservice")
-
-# Initialize PaddleOCR ONCE during startup.
-# This saves memory across hundreds of mobile driver instances.
-logger.info("Initializing PaddleOCR Engine...")
-ocr_engine = PaddleOCR(lang="ch")
-logger.info("PaddleOCR Engine loaded successfully.")
-
-# Detect which API to use (predict vs ocr)
-_USE_PREDICT = hasattr(ocr_engine, 'predict')
-logger.info(f"PaddleOCR API: {'predict (v3.5+)' if _USE_PREDICT else 'ocr (legacy)'}")
-
 
 class ImageRequest(BaseModel):
     image_base64: str
 
+class ConfigRequest(BaseModel):
+    engine_type: str
+    lang: str = "ch"
+    version: str = "PP-OCRv4"
+    # Future parameters for other engines can be added here
 
-def _run_ocr(img):
-    """
-    Run OCR and return results in unified format:
-    [  [box, (text, confidence)], ... ]
-    where box = [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]
-    
-    Handles both PaddleOCR v3.5+ predict() and legacy ocr() APIs transparently.
-    """
-    if _USE_PREDICT:
-        # predict() returns: [{"rec_texts": [...], "rec_scores": [...], "dt_polys": [...], ...}]
-        results = ocr_engine.predict(img)
-        formatted = []
-        if results:
-            page = results[0]
-            texts = page.get("rec_texts", [])
-            scores = page.get("rec_scores", [])
-            polys = page.get("dt_polys", [])
+# ---------------------------------------------------------
+# Strategy Pattern: Base OCR Engine
+# ---------------------------------------------------------
+class BaseOCREngine(ABC):
+    @abstractmethod
+    def process(self, img_np) -> list:
+        """
+        Process the image and return standard format:
+        [ [[x1,y1],[x2,y2],[x3,y3],[x4,y4]], (text, confidence) ]
+        """
+        pass
 
-            for i in range(len(texts)):
-                if i < len(polys) and i < len(scores):
-                    # dt_polys[i] is a numpy array of shape (N, 2), convert to list of [x, y]
-                    poly = polys[i]
-                    if hasattr(poly, 'tolist'):
-                        poly = poly.tolist()
-                    # Ensure we have exactly 4 corner points (take corners of bounding rect)
-                    if len(poly) == 4:
-                        box = poly
-                    else:
-                        # For polygons with more points, extract the 4 corners
-                        xs = [p[0] for p in poly]
-                        ys = [p[1] for p in poly]
-                        box = [
-                            [min(xs), min(ys)],
-                            [max(xs), min(ys)],
-                            [max(xs), max(ys)],
-                            [min(xs), max(ys)]
-                        ]
-                    # Convert numpy floats to Python floats for JSON serialization
-                    score = float(scores[i]) if hasattr(scores[i], 'item') else scores[i]
-                    formatted.append([box, (texts[i], score)])
-        return formatted
-    else:
-        # Legacy ocr() API: returns [[  [box, (text, conf)], ...  ]]
-        results = ocr_engine.ocr(img)
-        formatted = []
-        if results and results[0]:
-            for line in results[0]:
-                formatted.append(line)
-        return formatted
+# ---------------------------------------------------------
+# Specific Implementation: PaddleOCR
+# ---------------------------------------------------------
+class PaddleOCREngine(BaseOCREngine):
+    def __init__(self, lang="ch", version="PP-OCRv4"):
+        from paddleocr import PaddleOCR
+        logging.getLogger("ppocr").setLevel(logging.ERROR)
+        self.lang = lang
+        self.version = version
+        logger.info(f"Initializing PaddleOCR Engine... (lang: {lang}, version: {version})")
+        self.engine = PaddleOCR(lang=lang, ocr_version=version)
+        self._use_predict = hasattr(self.engine, 'predict')
+        logger.info(f"PaddleOCR API: {'predict (v3.5+)' if self._use_predict else 'ocr (legacy)'}")
 
+    def process(self, img_np) -> list:
+        if self._use_predict:
+            results = self.engine.predict(img_np)
+            formatted = []
+            if results:
+                page = results[0]
+                texts = page.get("rec_texts", [])
+                scores = page.get("rec_scores", [])
+                polys = page.get("dt_polys", [])
 
+                for i in range(len(texts)):
+                    if i < len(polys) and i < len(scores):
+                        poly = polys[i]
+                        if hasattr(poly, 'tolist'):
+                            poly = poly.tolist()
+                        if len(poly) == 4:
+                            box = poly
+                        else:
+                            xs = [p[0] for p in poly]
+                            ys = [p[1] for p in poly]
+                            box = [
+                                [min(xs), min(ys)],
+                                [max(xs), min(ys)],
+                                [max(xs), max(ys)],
+                                [min(xs), max(ys)]
+                            ]
+                        score = float(scores[i]) if hasattr(scores[i], 'item') else scores[i]
+                        formatted.append([box, (texts[i], score)])
+            return formatted
+        else:
+            results = self.engine.ocr(img_np)
+            formatted = []
+            if results and results[0]:
+                for line in results[0]:
+                    formatted.append(line)
+            return formatted
+
+# ---------------------------------------------------------
+# Placeholder Implementation: MockEngine (For testing)
+# ---------------------------------------------------------
+class MockOCREngine(BaseOCREngine):
+    def __init__(self, **kwargs):
+        logger.info("Initializing MockOCREngine...")
+        
+    def process(self, img_np) -> list:
+        # Return a fake result for testing multi-engine support
+        return [
+            [[[10, 10], [100, 10], [100, 50], [10, 50]], ("Mocked Text", 0.99)]
+        ]
+
+# ---------------------------------------------------------
+# Thread-Safe Engine Manager
+# ---------------------------------------------------------
+class OCREngineManager:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.current_engine: BaseOCREngine = None
+        
+        # Initialize default engine
+        default_type = os.getenv("OCR_ENGINE_TYPE", "paddle")
+        default_lang = os.getenv("OCR_LANG", "ch")
+        default_version = os.getenv("OCR_VERSION", "PP-OCRv4")
+        self.switch_engine(default_type, default_lang, default_version)
+
+    def switch_engine(self, engine_type: str, lang: str, version: str):
+        engine_type = engine_type.lower()
+        
+        # Instantiate the new engine first (outside the lock) so we don't block
+        # ongoing OCR requests during the heavy initialization phase.
+        if engine_type == "paddle":
+            new_engine = PaddleOCREngine(lang=lang, version=version)
+        elif engine_type == "mock":
+            new_engine = MockOCREngine()
+        else:
+            raise ValueError(f"Unsupported engine type: {engine_type}")
+            
+        with self.lock:
+            self.current_engine = new_engine
+            logger.info(f"Successfully switched OCR engine to: {engine_type}")
+
+    def process_image(self, img_np):
+        with self.lock:
+            engine = self.current_engine
+        return engine.process(img_np)
+
+# Initialize global manager
+engine_manager = OCREngineManager()
+
+# ---------------------------------------------------------
+# API Endpoints
+# ---------------------------------------------------------
 @app.post("/ocr")
-async def process_ocr(request: ImageRequest):
+def process_ocr(request: ImageRequest):
     try:
         img_data = base64.b64decode(request.image_base64)
         nparr = np.frombuffer(img_data, np.uint8)
@@ -89,13 +150,21 @@ async def process_ocr(request: ImageRequest):
         if img is None:
             raise ValueError("Invalid image data")
 
-        formatted_results = _run_ocr(img)
+        formatted_results = engine_manager.process_image(img)
                 
         return {"status": "success", "results": formatted_results}
     except Exception as e:
         logger.error(f"OCR processing failed: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.post("/config")
+def update_config(request: ConfigRequest):
+    try:
+        engine_manager.switch_engine(request.engine_type, request.lang, request.version)
+        return {"status": "success", "message": f"Engine switched to {request.engine_type}"}
+    except Exception as e:
+        logger.error(f"Config update failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

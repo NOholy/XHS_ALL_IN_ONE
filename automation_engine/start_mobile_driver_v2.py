@@ -44,18 +44,41 @@ def _build_components(config):
     from mobile_core.commenter import SmartCommenter
     from mobile_core.farmer import AccountFarmer
 
-    # Update template dir to be resolution-aware
+    # Update template dir to be resolution-aware and device-isolated
     try:
         img = driver.screenshot()
         h, w = img.shape[:2]
-        resolution_folder = f"{w}x{h}"
-        if not config.vision.templates_dir.endswith(resolution_folder):
-            config.vision.templates_dir = os.path.join(config.vision.templates_dir, resolution_folder)
-            os.makedirs(config.vision.templates_dir, exist_ok=True)
+        screenshot_res = f"{w}x{h}"
+        
+        # 优先读取 device_profile 获取更准确的分辨率缓存
+        serial = config.device.serial
+        profile_path = os.path.join(os.path.dirname(__file__), "data", "device_profiles", f"{serial}.json")
+        if os.path.exists(profile_path):
+            with open(profile_path, "r", encoding="utf-8") as f:
+                profile = json.load(f)
+                if profile.get("screenshot_resolution"):
+                    screenshot_res = profile["screenshot_resolution"]
+        
+        base_templates = config.vision.templates_dir
+        if base_templates.endswith(screenshot_res):
+            base_templates = os.path.dirname(base_templates)
+            if serial and base_templates.endswith(serial):
+                base_templates = os.path.dirname(base_templates)
+                
+        if serial:
+            device_templates_dir = os.path.join(base_templates, serial, screenshot_res)
+        else:
+            device_templates_dir = os.path.join(base_templates, screenshot_res)
+            
+        shared_templates_dir = os.path.join(base_templates, screenshot_res)
+        os.makedirs(device_templates_dir, exist_ok=True)
+        config.vision.templates_dir = device_templates_dir
+        config.vision.shared_templates_dir = shared_templates_dir
     except Exception as e:
         logger.warning(f"Could not determine resolution for template dir: {e}")
+        config.vision.shared_templates_dir = None
 
-    vision = VisionEngine(config.vision.templates_dir)
+    vision = VisionEngine(config.vision.templates_dir, getattr(config.vision, 'shared_templates_dir', None))
     ocr = OCRClient(
         endpoint=config.ocr.endpoint,
         timeout=config.ocr.timeout,
@@ -78,12 +101,12 @@ def _build_components(config):
     }
 
 
-def action_init(config):
+def action_init(config, force=False):
     """真机初始化 — 不预构建组件，避免提前安装 u2 agent"""
     from flows.init_flow import InitOrchestrator
 
     orchestrator = InitOrchestrator(config)
-    report = orchestrator.run(config.device.serial)
+    report = orchestrator.run(config.device.serial, force=force)
     print("\n--- INIT REPORT ---")
     print(json.dumps(report, ensure_ascii=False, indent=2))
     print("-------------------\n")
@@ -273,6 +296,9 @@ def parse_args():
                         help="覆盖 auto 模式的运行策略")
     parser.add_argument("--farm-duration", type=int, help="覆盖养号时长(分钟)")
     # 传统参数（extract/reply 专用）
+    parser.add_argument("--force", action="store_true", default=False,
+                        help="强制重新初始化（跳过幂等检测，全量执行所有步骤）")
+    # 传统参数（extract/reply 专用）
     parser.add_argument("--x", type=int, help="X坐标")
     parser.add_argument("--y", type=int, help="Y坐标")
     parser.add_argument("--text", type=str, help="评论文本")
@@ -309,7 +335,7 @@ def main():
 
     # 路由到对应 action
     if args.action == "init":
-        action_init(config)
+        action_init(config, force=args.force)
     elif args.action == "farm":
         action_farm(config)
     elif args.action == "intercept":

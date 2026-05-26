@@ -78,7 +78,7 @@ class AgentlessMinitouchDriver:
                 capture_output=True, text=True, timeout=5
             )
             if "Physical size:" in result.stdout:
-                wh = result.stdout.split("Physical size:")[1].strip()
+                wh = result.stdout.split("Physical size:")[1].strip().split('\n')[0].strip()
                 w, h = wh.split("x")
                 self._screen_w = int(w)
                 self._screen_h = int(h)

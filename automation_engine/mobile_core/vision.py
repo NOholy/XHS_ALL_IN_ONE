@@ -6,22 +6,37 @@ from .logger import get_logger
 logger = get_logger("vision")
 
 class VisionEngine:
-    def __init__(self, templates_dir):
+    def __init__(self, templates_dir, shared_templates_dir=None):
         self.templates_dir = templates_dir
+        self.shared_templates_dir = shared_templates_dir
         self.templates = {}
         self._load_templates()
 
     def _load_templates(self):
-        if not os.path.exists(self.templates_dir):
+        """Load templates from device-specific dir, then fill gaps from shared dir."""
+        # 1. Load from device-specific directory
+        if os.path.exists(self.templates_dir):
+            for file in os.listdir(self.templates_dir):
+                if file.endswith('.png'):
+                    name = file.replace('.png', '')
+                    path = os.path.join(self.templates_dir, file)
+                    tpl = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                    if tpl is not None:
+                        self.templates[name] = tpl
+        else:
             logger.warning(f"Templates directory {self.templates_dir} does not exist.")
-            return
-        for file in os.listdir(self.templates_dir):
-            if file.endswith('.png'):
-                name = file.replace('.png', '')
-                path = os.path.join(self.templates_dir, file)
-                tpl = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-                if tpl is not None:
-                    self.templates[name] = tpl
+        
+        # 2. Fill gaps from shared/fallback directory
+        if self.shared_templates_dir and os.path.exists(self.shared_templates_dir):
+            for file in os.listdir(self.shared_templates_dir):
+                if file.endswith('.png'):
+                    name = file.replace('.png', '')
+                    if name not in self.templates:  # Don't override device-specific
+                        path = os.path.join(self.shared_templates_dir, file)
+                        tpl = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+                        if tpl is not None:
+                            self.templates[name] = tpl
+                            logger.info(f"Loaded shared fallback template: {name}")
 
     def find_template(self, screen_img, template_name, threshold=0.75):
         """Find a template in the screen image using OpenCV."""

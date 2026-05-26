@@ -6,6 +6,8 @@
 import subprocess
 import os
 import time
+import glob
+import cv2
 from mobile_core.device_optimizer import DeviceOptimizer
 from mobile_core.logger import get_logger
 
@@ -21,19 +23,44 @@ class InitOrchestrator:
     def __init__(self, config):
         self.config = config
 
-    def run(self, device_serial: str = None):
+    def run(self, device_serial: str = None, force: bool = False):
         """
         执行完整初始化流程。
         每一步均可通过 config.device.auto_* 开关控制是否执行。
+        支持幂等：重复执行时自动跳过高开销步骤（IP轮换、模板采集），除非 force=True。
         """
         serial = device_serial or self.config.device.serial
-        logger.info(f"Starting device initialization for: {serial or 'default'}")
+        
+        # ─── 修正 1：在所有对象初始化前探测 Serial ───
+        if not serial:
+            try:
+                devices_result = subprocess.run(["adb", "devices"], capture_output=True, text=True, timeout=10)
+                lines = [l for l in devices_result.stdout.strip().split('\n')[1:] if '\tdevice' in l]
+                if len(lines) == 1:
+                    serial = lines[0].split('\t')[0]
+                    logger.info(f"Auto-detected device serial: {serial}")
+                elif len(lines) > 1:
+                    logger.warning(f"Multiple devices detected. Using first: {lines[0].split(chr(9))[0]}")
+                    serial = lines[0].split('\t')[0]
+            except Exception as e:
+                logger.warning(f"Serial auto-detection failed: {e}")
+
+        logger.info(f"Starting device initialization for: {serial or 'default'} (force={force})")
 
         report = {
             "serial": serial,
             "steps": {},
             "success": True,
         }
+
+        # ─── 幂等屏障：serial 已确定，加载上次的初始化档案 ───
+        existing_profile = None
+        if not force:
+            existing_profile = self._load_device_profile(serial)
+            if existing_profile and existing_profile.get("success"):
+                logger.info(f"Found existing profile for {serial}, last init: {existing_profile.get('last_init_time', 'unknown')}. Costly steps will be skipped.")
+            else:
+                existing_profile = None  # Treat as first-time init
 
         optimizer = DeviceOptimizer(serial)
         adb_prefix = ["adb"] if not serial else ["adb", "-s", serial]
@@ -89,12 +116,29 @@ class InitOrchestrator:
             logger.info(f"Screen resolution: {w}x{h}")
             report["steps"]["screen_resolution"] = f"{w}x{h}"
             
-            # Update vision templates dir for resolution to enable watchdog during init
-            res_dir = f"{w}x{h}"
-            if not self.config.vision.templates_dir.endswith(res_dir):
-                self.config.vision.templates_dir = os.path.join(self.config.vision.templates_dir, res_dir)
-                os.makedirs(self.config.vision.templates_dir, exist_ok=True)
-                vision.templates_dir = self.config.vision.templates_dir
+            # Use screenshot actual pixel size for template dir (may differ from wm size due to DPI/navbar)
+            try:
+                test_img = driver.screenshot()
+                ss_h, ss_w = test_img.shape[:2]
+                screenshot_res = f"{ss_w}x{ss_h}"
+                logger.info(f"Screenshot resolution: {screenshot_res} (wm size: {w}x{h})")
+            except Exception:
+                screenshot_res = f"{w}x{h}"
+                ss_w, ss_h = w, h
+                logger.warning(f"Screenshot failed, using wm size for templates: {screenshot_res}")
+            
+            # Build device-specific template path: data/ui_templates/{serial}/{screenshot_res}/
+            base_templates_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates")
+            if serial:
+                device_templates_dir = os.path.join(base_templates_dir, serial, screenshot_res)
+            else:
+                device_templates_dir = os.path.join(base_templates_dir, screenshot_res)
+            os.makedirs(device_templates_dir, exist_ok=True)
+            self.config.vision.templates_dir = device_templates_dir
+            vision.templates_dir = device_templates_dir
+            vision._load_templates() # 修正 3：重新加载专属模板，让 Watchdog 立即生效
+            self._screenshot_res = screenshot_res
+            self._base_templates_dir = base_templates_dir
         else:
             logger.warning("Could not detect resolution. Using config defaults.")
             report["steps"]["screen_resolution"] = "FALLBACK"
@@ -155,6 +199,11 @@ class InitOrchestrator:
         # ═══════════════════════════════════════════
         if self.config.device.check_login_status:
             logger.info("[8/10] Checking login status (efficient single-OCR)...")
+            try:
+                # 修正 6：先处理开屏弹窗，避免 OCR 被广告挡住
+                watchdog.check_and_handle()
+            except Exception as e:
+                pass
             login_ok = self._check_login_status(driver, ocr, adb_prefix)
             report["steps"]["login_status"] = "LOGGED_IN" if login_ok else "NOT_LOGGED_IN"
             if not login_ok:
@@ -163,33 +212,83 @@ class InitOrchestrator:
             report["steps"]["login_status"] = "SKIPPED"
 
         # ═══════════════════════════════════════════
-        # Step 9: IP 轮换测试
+        # Step 9: IP 轮换测试（幂等：已初始化过则跳过）
         # ═══════════════════════════════════════════
         if self.config.device.auto_rotate_ip_on_init:
-            logger.info("[9/10] Testing IP rotation...")
-            optimizer.toggle_airplane_mode()
-            report["steps"]["ip_rotation"] = "OK"
+            if existing_profile and existing_profile.get("steps", {}).get("ip_rotation") == "OK":
+                logger.info("[9/10] IP rotation: SKIPPED (already verified in previous init, use --force to redo)")
+                report["steps"]["ip_rotation"] = "SKIPPED_IDEMPOTENT"
+            else:
+                logger.info("[9/10] Testing IP rotation...")
+                optimizer.toggle_airplane_mode()
+                report["steps"]["ip_rotation"] = "OK"
         else:
             report["steps"]["ip_rotation"] = "SKIPPED"
 
         # ═══════════════════════════════════════════
         # Step 10: UI 模板采集
         # ═══════════════════════════════════════════
+        # Ensure fallback values for base_templates_dir / screenshot_res if Step 2 didn't set them
+        base_templates_dir = getattr(self, '_base_templates_dir', os.path.join(os.path.dirname(__file__), '..', 'data', 'ui_templates'))
+        screenshot_res = getattr(self, '_screenshot_res', f"{self.config.device.screen_width}x{self.config.device.screen_height}")
+        ss_w = self.config.device.screen_width
+        ss_h = self.config.device.screen_height
+        # Try to get actual screenshot dimensions if they were set in Step 2
+        try:
+            _sr = screenshot_res.split('x')
+            ss_w, ss_h = int(_sr[0]), int(_sr[1])
+        except Exception:
+            pass
+
         if self.config.device.auto_crop_templates_on_init:
-            logger.info("[10/10] Running auto template cropper...")
-            try:
-                from tools.auto_crop_templates import automated_setup_pipeline
-                automated_setup_pipeline(driver, ocr, watchdog=watchdog)
-                report["steps"]["template_crop"] = "OK"
-            except Exception as e:
-                logger.error(f"Template cropping failed: {e}")
-                report["steps"]["template_crop"] = f"FAILED: {e}"
+            # 幂等检测：模板是否已完整
+            if existing_profile and self._templates_complete(serial, screenshot_res, base_templates_dir):
+                logger.info("[10/10] Template crop: SKIPPED (all templates already present, use --force to redo)")
+                report["steps"]["template_crop"] = "SKIPPED_IDEMPOTENT"
+            else:
+                logger.info("[10/10] Running auto template cropper...")
+                try:
+                    from tools.auto_crop_templates import automated_setup_pipeline
+                    automated_setup_pipeline(driver, ocr, serial=serial, watchdog=watchdog)
+                    report["steps"]["template_crop"] = "OK"
+
+                    # Generate scaled watchdog templates from best available source
+                    self._generate_watchdog_templates(base_templates_dir, serial, screenshot_res, ss_w, ss_h)
+                except Exception as e:
+                    logger.error(f"Template cropping failed: {e}")
+                    report["steps"]["template_crop"] = f"FAILED: {e}"
         else:
             report["steps"]["template_crop"] = "SKIPPED"
 
-        # 输出报告
-        logger.info(f"Initialization complete. Report: {report}")
-        return report
+        # Persist device profile for future reference
+        import json
+        from datetime import datetime, timezone
+        profiles_dir = os.path.join(os.path.dirname(__file__), "..", "data", "device_profiles")
+        os.makedirs(profiles_dir, exist_ok=True)
+        
+        # 修正 7：增加完整的设备指纹信息
+        profile = {
+            **report,
+            "last_init_time": datetime.now(timezone.utc).isoformat(),
+            "screenshot_resolution": getattr(self, '_screenshot_res', None),
+            "physical_resolution": report["steps"].get("screen_resolution"),
+            "android_version": self._get_android_version(adb_prefix),
+            "xhs_version": getattr(self, '_xhs_version', None),
+            "abi": getattr(self, '_device_abi', None)
+        }
+
+        profile_serial = serial or "unknown"
+        profile_path = os.path.join(profiles_dir, f"{profile_serial}.json")
+        try:
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, indent=2, ensure_ascii=False)
+            logger.info(f"Device profile saved to {profile_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save device profile: {e}")
+    
+            # 输出报告
+            logger.info(f"Initialization complete. Report: {report}")
+            return report
 
     # ─────────── Private Methods ───────────
 
@@ -243,6 +342,7 @@ class InitOrchestrator:
             if hasattr(driver, "ensure_minitouch"):
                 if driver.ensure_minitouch():
                     abi = driver._get_device_abi()
+                    self._device_abi = abi
                     return f"OK (ABI: {abi}, minitouch socket connected)"
                 else:
                     return "FALLBACK (minitouch unavailable, using adb input tap)"
@@ -260,6 +360,7 @@ class InitOrchestrator:
             )
             if "versionName=" in result.stdout:
                 version = result.stdout.split("versionName=")[1].split("\n")[0]
+                self._xhs_version = version
                 logger.info(f"XHS app found, version: {version}")
                 return True
             return False
@@ -309,3 +410,116 @@ class InitOrchestrator:
         except Exception as e:
             logger.error(f"Login check failed: {e}")
             return True  # 检测失败时不阻断流程
+
+    def _generate_watchdog_templates(self, base_templates_dir, serial, target_res, target_w, target_h):
+        """Generate watchdog popup templates by scaling from best available source resolution."""
+        watchdog_templates = [
+            "slider_puzzle", "security_verification", "account_frozen",
+            "phone_bind", "frequent_operation", "btn_iknow",
+            "btn_skip", "btn_update_later", "btn_cancel", "btn_close"
+        ]
+
+        # Target directory
+        if serial:
+            target_dir = os.path.join(base_templates_dir, serial, target_res)
+        else:
+            target_dir = os.path.join(base_templates_dir, target_res)
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Check which templates are already present
+        missing = [t for t in watchdog_templates if not os.path.exists(os.path.join(target_dir, f"{t}.png"))]
+        if not missing:
+            logger.info("All watchdog templates already present.")
+            return
+
+        # Find best source directory (the one with most watchdog templates)
+        best_source = None
+        best_count = 0
+
+        # Search all resolution dirs (skip device-specific subdirs, look for direct resolution dirs and inside device dirs)
+        for res_dir in glob.glob(os.path.join(base_templates_dir, "*", "*")) + glob.glob(os.path.join(base_templates_dir, "*")):
+            if not os.path.isdir(res_dir) or res_dir == target_dir:
+                continue
+            count = sum(1 for t in watchdog_templates if os.path.exists(os.path.join(res_dir, f"{t}.png")))
+            if count > best_count:
+                best_count = count
+                best_source = res_dir
+
+        if not best_source or best_count == 0:
+            logger.warning("No source watchdog templates found to scale from.")
+            return
+
+        # Parse source resolution from dir name
+        source_dirname = os.path.basename(best_source)
+        try:
+            src_w, src_h = map(int, source_dirname.split("x"))
+        except ValueError:
+            logger.warning(f"Cannot parse resolution from source dir: {source_dirname}")
+            return
+
+        scaled_count = 0
+        for template_name in missing:
+            src_path = os.path.join(best_source, f"{template_name}.png")
+            if not os.path.exists(src_path):
+                continue
+
+            src_img = cv2.imread(src_path)
+            if src_img is None:
+                continue
+
+            # Scale proportionally
+            scale_x = target_w / src_w
+            scale_y = target_h / src_h
+            new_w = max(1, int(src_img.shape[1] * scale_x))
+            new_h = max(1, int(src_img.shape[0] * scale_y))
+            scaled_img = cv2.resize(src_img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+            dst_path = os.path.join(target_dir, f"{template_name}.png")
+            cv2.imwrite(dst_path, scaled_img)
+            scaled_count += 1
+
+        logger.info(f"Generated {scaled_count}/{len(missing)} watchdog templates by scaling from {source_dirname}")
+
+    def _load_device_profile(self, serial) -> dict:
+        """加载设备的上一次初始化档案，用于幂等判断。"""
+        if not serial:
+            return None
+        import json
+        profiles_dir = os.path.join(os.path.dirname(__file__), "..", "data", "device_profiles")
+        profile_path = os.path.join(profiles_dir, f"{serial}.json")
+        if os.path.exists(profile_path):
+            try:
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load device profile: {e}")
+        return None
+
+    def _templates_complete(self, serial, screenshot_res, base_templates_dir) -> bool:
+        """检查该设备的模板文件是否已完整（包括 watchdog 模板）。"""
+        required_templates = [
+            "send_button",
+            "slider_puzzle", "security_verification", "account_frozen",
+            "phone_bind", "frequent_operation", "btn_iknow",
+            "btn_skip", "btn_update_later", "btn_cancel", "btn_close"
+        ]
+        if serial:
+            target_dir = os.path.join(base_templates_dir, serial, screenshot_res)
+        else:
+            target_dir = os.path.join(base_templates_dir, screenshot_res)
+        
+        for t in required_templates:
+            if not os.path.exists(os.path.join(target_dir, f"{t}.png")):
+                return False
+        return True
+
+    def _get_android_version(self, adb_prefix) -> str:
+        """获取安卓版本号"""
+        try:
+            result = subprocess.run(
+                adb_prefix + ["shell", "getprop", "ro.build.version.release"],
+                capture_output=True, text=True, timeout=5
+            )
+            return result.stdout.strip()
+        except Exception:
+            return "unknown"

@@ -13,11 +13,14 @@ from mobile_core.exceptions import OCRServiceError
 
 logger = get_logger("auto_cropper")
 
-def crop_and_save_via_ocr(driver, ocr_client, text_query, filename, fallback_box=None):
+def crop_and_save_via_ocr(driver, ocr_client, text_query, filename, serial=None, fallback_box=None):
     img = driver.screenshot()
     h_screen, w_screen = img.shape[:2]
     resolution_dir = f"{w_screen}x{h_screen}"
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", resolution_dir)
+    if serial:
+        out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", serial, resolution_dir)
+    else:
+        out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", resolution_dir)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, f"{filename}.png")
     
@@ -59,7 +62,7 @@ def crop_and_save_via_ocr(driver, ocr_client, text_query, filename, fallback_box
         return True
     return False
 
-def automated_setup_pipeline(driver, ocr_client, watchdog=None):
+def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None):
     logger.info("Industrial Pipeline: Initiating automated XHS UI template extraction...")
     
     driver.ensure_app_foreground()
@@ -86,12 +89,12 @@ def automated_setup_pipeline(driver, ocr_client, watchdog=None):
     time.sleep(2)
     
     logger.info("Searching for '回复' (Reply) button via OCR...")
-    found_reply = crop_and_save_via_ocr(driver, ocr_client, "回复", "reply_button")
+    found_reply = crop_and_save_via_ocr(driver, ocr_client, "回复", "reply_button", serial=serial)
     if not found_reply:
         logger.info("Scrolling down again to find '回复'...")
         driver.human_swipe("up")
         time.sleep(2)
-        crop_and_save_via_ocr(driver, ocr_client, "回复", "reply_button")
+        crop_and_save_via_ocr(driver, ocr_client, "回复", "reply_button", serial=serial)
     
     # 2. Trigger the keyboard
     logger.info("Triggering keyboard to reveal '发送' (Send) button...")
@@ -125,21 +128,24 @@ def automated_setup_pipeline(driver, ocr_client, watchdog=None):
     fallback_send_box = (int(w * 0.8), int(h * 0.9), w, h)
     
     logger.info("Searching for '发送'/'发布' (Send) button via OCR...")
-    found = crop_and_save_via_ocr(driver, ocr_client, "发送", "send_button")
+    found = crop_and_save_via_ocr(driver, ocr_client, "发送", "send_button", serial=serial)
     if not found:
-        found = crop_and_save_via_ocr(driver, ocr_client, "发布", "send_button")
+        found = crop_and_save_via_ocr(driver, ocr_client, "发布", "send_button", serial=serial)
     if not found:
-        crop_and_save_via_ocr(driver, ocr_client, "NOT_FOUND", "send_button", fallback_box=fallback_send_box)
+        crop_and_save_via_ocr(driver, ocr_client, "NOT_FOUND", "send_button", serial=serial, fallback_box=fallback_send_box)
     
     logger.info("Cleaning up and returning to feed...")
     driver.press_back()
     driver.press_back()
 
-def create_mock_templates_for_testing(w=1080, h=1920):
+def create_mock_templates_for_testing(w=1080, h=1920, serial=None):
     """Generates dummy images to bypass missing template errors during testing."""
     import numpy as np
     resolution_dir = f"{w}x{h}"
-    out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", resolution_dir)
+    if serial:
+        out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", serial, resolution_dir)
+    else:
+        out_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", resolution_dir)
     os.makedirs(out_dir, exist_ok=True)
     
     templates = ["reply_button", "send_button", "slider_puzzle", "security_verification"]
