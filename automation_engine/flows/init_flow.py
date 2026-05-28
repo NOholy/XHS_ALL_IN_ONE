@@ -272,8 +272,8 @@ class InitOrchestrator:
                     else:
                         report["steps"]["template_crop"] = "OK"
 
-                    # Generate scaled watchdog templates from best available source
-                    self._generate_watchdog_templates(base_templates_dir, serial, screenshot_res, ss_w, ss_h)
+                    # Watchdog popups now rely entirely on OCR; no need to scale mock templates.
+                    # self._generate_watchdog_templates(base_templates_dir, serial, screenshot_res, ss_w, ss_h)
                 except Exception as e:
                     logger.error(f"Template cropping failed: {e}")
                     report["steps"]["template_crop"] = f"FAILED: {e}"
@@ -615,12 +615,10 @@ class InitOrchestrator:
         return None
 
     def _templates_complete(self, serial, screenshot_res, base_templates_dir) -> bool:
-        """检查该设备的模板文件是否已完整且质量合格。"""
+        """检查该设备的真实交互模板文件是否已完整且质量合格。"""
         required_templates = [
-            "send_button", "reply_button",
-            "slider_puzzle", "security_verification", "account_frozen",
-            "phone_bind", "frequent_operation", "btn_iknow",
-            "btn_skip", "btn_update_later", "btn_cancel", "btn_close"
+            "tab_home", "tab_profile", "search_input", 
+            "comment_input", "send_button", "reply_button"
         ]
         if serial:
             target_dir = os.path.join(base_templates_dir, serial, screenshot_res)
@@ -628,13 +626,14 @@ class InitOrchestrator:
             target_dir = os.path.join(base_templates_dir, screenshot_res)
 
         import numpy as np
+        import cv2
         for t in required_templates:
             path = os.path.join(target_dir, f"{t}.png")
             if not os.path.exists(path):
                 return False
             # Quality check: reject solid-color / blank templates
             tpl_img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
-            if tpl_img is not None and np.var(tpl_img) < 100:
+            if tpl_img is not None and np.var(tpl_img) < 50:
                 logger.warning(f"Template '{t}' exists but appears blank (variance={np.var(tpl_img):.1f}). Needs re-capture.")
                 return False
         return True

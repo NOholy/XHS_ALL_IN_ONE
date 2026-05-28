@@ -388,6 +388,37 @@ class AgentlessMinitouchDriver:
             cmd = self.adb_prefix + ["shell", "input", "tap", str(nx), str(ny)]
             subprocess.run(cmd)
 
+    def physical_double_tap(self, x, y):
+        """Physical double tap. Uses minitouch if available. Extremely useful for liking posts."""
+        nx = int(x + random.randint(-15, 15))
+        ny = int(y + random.randint(-15, 15))
+
+        if self._mt_available:
+            mt_x, mt_y = self._scale_coords(nx, ny)
+            logger.info(f"Minitouch double tap at ({nx}, {ny})")
+            
+            # First tap
+            self._mt_send(f"d 0 {mt_x} {mt_y} {random.randint(40, 80)}")
+            self._mt_send("c")
+            time.sleep(random.uniform(0.04, 0.08))
+            self._mt_send("u 0")
+            self._mt_send("c")
+            
+            # Interval
+            time.sleep(random.uniform(0.05, 0.12))
+            
+            # Second tap
+            self._mt_send(f"d 0 {mt_x} {mt_y} {random.randint(40, 80)}")
+            self._mt_send("c")
+            time.sleep(random.uniform(0.04, 0.08))
+            self._mt_send("u 0")
+            self._mt_send("c")
+        else:
+            logger.info(f"ADB fallback double tap at ({nx}, {ny})")
+            subprocess.run(self.adb_prefix + ["shell", "input", "tap", str(nx), str(ny)])
+            time.sleep(random.uniform(0.05, 0.12))
+            subprocess.run(self.adb_prefix + ["shell", "input", "tap", str(nx), str(ny)])
+
     def physical_swipe(self, sx, sy, ex, ey):
         """Bezier curve physical swipe. Uses minitouch if available."""
         if self._mt_available:

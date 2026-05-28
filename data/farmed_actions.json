@@ -1,0 +1,27 @@
+{
+    "history": [
+        {
+            "date": "2026-05-28",
+            "actions": {
+                "like": 2,
+                "collect": 1,
+                "comment": 0,
+                "follow": 0
+            },
+            "details": [
+                {
+                    "time": "21:10:19",
+                    "action": "like"
+                },
+                {
+                    "time": "21:17:30",
+                    "action": "collect"
+                },
+                {
+                    "time": "23:02:58",
+                    "action": "like"
+                }
+            ]
+        }
+    ]
+}

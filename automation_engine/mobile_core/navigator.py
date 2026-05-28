@@ -75,14 +75,15 @@ class XHSNavigator:
             logger.info("Already on home feed.")
             return True
 
-        # 尝试通过底部Tab点击回到首页
-        img = self.driver.screenshot()
-        tab = self.vision.find_template(img, "tab_home", threshold=0.7)
-        if tab:
-            logger.info(f"Clicking home tab at ({tab['x']}, {tab['y']})")
-            self.driver.physical_tap(tab['x'], tab['y'])
-            self.driver.human_sleep(2.0, 1.0)
-            return True
+        # 尝试通过固定的底部Tab坐标点击回到首页（代替不稳定的模板匹配）
+        w_screen, h_screen = self.driver.get_screen_size()
+        tab_y = int(h_screen * 0.96)  # Bottom 4% is usually the center of the tab
+        tab_x = w_screen // 10        # Center of the 1st tab (out of 5)
+        
+        logger.info(f"Clicking home tab at fixed coordinate ({tab_x}, {tab_y})")
+        self.driver.physical_tap(tab_x, tab_y)
+        self.driver.human_sleep(2.0, 1.0)
+        return True
 
         # Fallback: 连续按返回键
         for _ in range(5):
@@ -126,18 +127,15 @@ class XHSNavigator:
 
     def go_profile(self):
         """进入个人主页"""
-        img = self.driver.screenshot()
-        tab = self.vision.find_template(img, "tab_profile", threshold=0.7)
-        if tab:
-            logger.info(f"Clicking profile tab at ({tab['x']}, {tab['y']})")
-            self.driver.physical_tap(tab['x'], tab['y'])
-            self.driver.human_sleep(2.0, 1.0)
-            return True
-
-        # Fallback: 底部最右侧
-        w = self.config.device.screen_width
-        h = self.config.device.screen_height
-        self.driver.physical_tap(int(w * 0.9), int(h * 0.97))
+        # 强制使用底部固定坐标点击“我”Tab
+        w_screen, h_screen = self.driver.get_screen_size()
+        tab_y = int(h_screen * 0.96)
+        tab_x = int(w_screen * 0.9)  # Center of the 5th tab (out of 5)
+        
+        logger.info(f"Clicking profile tab at fixed coordinate ({tab_x}, {tab_y})")
+        self.driver.physical_tap(tab_x, tab_y)
+        self.driver.human_sleep(2.0, 1.0)
+        return True
         self.driver.human_sleep(2.0, 1.0)
         return True
 

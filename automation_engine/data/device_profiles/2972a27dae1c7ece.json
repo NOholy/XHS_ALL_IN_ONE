@@ -10,13 +10,13 @@
     "keep_screen_on": "OK",
     "xhs_installed": "OK",
     "login_status": "LOGGED_IN",
-    "ip_rotation": "OK",
+    "ip_rotation": "SKIPPED_IDEMPOTENT",
     "template_crop": {
       "send_button": "OCR"
     }
   },
   "success": true,
-  "last_init_time": "2026-05-27T23:21:49.138260+00:00",
+  "last_init_time": "2026-05-28T14:07:07.630070+00:00",
   "screenshot_resolution": "1080x2220",
   "physical_resolution": "1440x2960",
   "android_version": "9",

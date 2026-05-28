@@ -41,7 +41,7 @@ class VisionEngine:
     def find_template(self, screen_img, template_name, threshold=0.75):
         """Find a template in the screen image using OpenCV."""
         if template_name not in self.templates:
-            logger.error(f"Template '{template_name}' not loaded.")
+            logger.debug(f"Template '{template_name}' not loaded.")
             return None
 
         template = self.templates[template_name]

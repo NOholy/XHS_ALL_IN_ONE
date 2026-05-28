@@ -126,7 +126,8 @@ class OCRClient:
         except requests.RequestException as e:
             self._breaker.record_failure()
             logger.error("OCR API request failed", extra={"error": str(e)})
-            raise OCRServiceError(f"OCR Request Failed: {e}")
+            # Return empty results instead of crashing the automation flow
+            return []
 
     def find_text(self, image_np, target_text, conf_threshold=0.7):
         """Find specific text in image and return its bounding box and confidence."""

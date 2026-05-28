@@ -141,6 +141,19 @@ class FarmConfig:
 
     # 个人主页浏览
     visit_profile_probability: float = 0.03
+    
+    # 工业级风控优化参数
+    persona: str = "balanced"            # "balanced" | "liker" | "collector" | "commenter" | "lurker"
+    fatigue_decay_enabled: bool = True   # 是否开启时间衰减曲线
+    combo_boost_enabled: bool = True     # 是否开启连击概率加成(点赞后提升收藏/评论概率)
+    
+    # 废话评论生成配置
+    enable_llm_farm_comments: bool = False
+    llm_farm_prompt_template: str = (
+        "你是一个在使用小红书的普通年轻网民。请根据以下帖子的正文内容，生成一句非常简短、情绪化、像真人的废话式评论。"
+        "规则：1. 不要提供实质性建议，只表达情绪或共鸣。2. 如果是美食/美图，可以说类似'看着也太赞了吧'。3. 绝对不要超过10个字。不要使用任何标点符号。"
+        "帖子正文：{content}"
+    )
 
 
 @dataclass

@@ -32,26 +32,9 @@ class PopupWatchdog:
     def check_screen(self, screen_img):
         """
         Scan the screen for known risks or popups.
-        Uses template matching first, then OCR fallback if available.
+        Uses pure OCR.
         Raises exceptions if critical issues are found, or automatically handles minor ones.
         """
-        # ─── Phase 1: Template matching (fast) ───
-        critical_risks = ["slider_puzzle", "security_verification", "account_frozen", "phone_bind", "frequent_operation"]
-        for risk in critical_risks:
-            if self.vision.find_template(screen_img, risk, threshold=0.8):
-                logger.critical(f"🚨 Risk control triggered (template): {risk}!")
-                raise RiskControlTriggered(f"Risk control detected: {risk}")
-
-        minor_popups = ["btn_iknow", "btn_skip", "btn_update_later", "btn_cancel", "btn_close"]
-        for popup in minor_popups:
-            match = self.vision.find_template(screen_img, popup, threshold=0.8)
-            if match:
-                logger.warning(f"Intercepted minor popup (template): {popup}. Auto-dismissing.")
-                self.driver.physical_tap(match['x'], match['y'])
-                self.driver.human_sleep(2.0, 1.0)
-                raise PopupIntercepted(f"Handled popup {popup}, state needs refresh.")
-
-        # ─── Phase 2: OCR fallback (more reliable, slower) ───
         if self.ocr is not None:
             self._check_screen_via_ocr(screen_img)
 

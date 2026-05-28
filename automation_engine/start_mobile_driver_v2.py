@@ -91,7 +91,7 @@ def _build_components(config):
     searcher = XHSSearcher(driver, vision, ocr, keyboard, navigator, config)
     reader = PostReader(driver, vision, ocr, config)
     commenter = SmartCommenter(driver, vision, ocr, keyboard, config)
-    farmer = AccountFarmer(driver, vision, ocr, navigator, reader, config)
+    farmer = AccountFarmer(driver, vision, ocr, navigator, reader, commenter, config)
 
     return {
         "driver": driver, "vision": vision, "ocr": ocr,

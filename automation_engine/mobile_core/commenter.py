@@ -34,15 +34,15 @@ class SmartCommenter:
 
     # --- 评论生成 ---
 
-    def compose_comment(self, post_context: dict = None, keyword: str = "") -> str:
+    def compose_comment(self, post_context: dict = None, keyword: str = "", mode_override: str = None, prompt_override: str = None) -> str:
         """
-        根据配置的 comment_mode 生成评论文本。
+        根据配置的 comment_mode 生成评论文本。支持 override 用于非截流场景（如养号废话）。
         """
-        mode = self.config.intercept.comment_mode
+        mode = mode_override or self.config.intercept.comment_mode
         templates = self.config.intercept.comment_templates
 
         if mode == "llm" and self.config.intercept.llm_api_key:
-            return self._generate_llm_comment(post_context, keyword)
+            return self._generate_llm_comment(post_context, keyword, prompt_override)
         elif mode == "contextual" and post_context:
             tpl = self._generate_contextual_comment(post_context, templates)
             return self._parse_spintax(tpl)
@@ -72,12 +72,13 @@ class SmartCommenter:
         top_n = min(3, len(scored))
         return random.choice([s[1] for s in scored[:top_n]])
 
-    def _generate_llm_comment(self, post_context: dict, keyword: str) -> str:
+    def _generate_llm_comment(self, post_context: dict, keyword: str, prompt_override: str = None) -> str:
         """调用 LLM API 生成评论"""
         cfg = self.config.intercept
         content = " ".join(post_context.get("description", []))[:200] if post_context else ""
 
-        prompt = cfg.llm_prompt_template.format(
+        template_str = prompt_override or cfg.llm_prompt_template
+        prompt = template_str.format(
             keyword=keyword,
             content=content
         )
