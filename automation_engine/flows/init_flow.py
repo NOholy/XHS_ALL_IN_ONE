@@ -9,6 +9,7 @@ import time
 import glob
 import cv2
 from mobile_core.device_optimizer import DeviceOptimizer
+from mobile_core.exceptions import RiskControlTriggered
 from mobile_core.logger import get_logger
 
 logger = get_logger("init_flow")
@@ -82,7 +83,7 @@ class InitOrchestrator:
 
         ocr = OCRClient(self.config.ocr.endpoint)
         vision = VisionEngine(self.config.vision.templates_dir)
-        watchdog = PopupWatchdog(vision, driver)
+        watchdog = PopupWatchdog(vision, driver, ocr_client=ocr)
 
         # ═══════════════════════════════════════════
         # Step 0: Pre-flight checks (OCR health)
@@ -202,8 +203,10 @@ class InitOrchestrator:
             try:
                 # 修正 6：先处理开屏弹窗，避免 OCR 被广告挡住
                 watchdog.check_and_handle()
+            except RiskControlTriggered:
+                raise  # 风控触发不应被吞掉，透传给上层处理
             except Exception as e:
-                pass
+                logger.warning(f"Watchdog pre-check failed (non-critical): {e}")
             login_ok = self._check_login_status(driver, ocr, adb_prefix)
             report["steps"]["login_status"] = "LOGGED_IN" if login_ok else "NOT_LOGGED_IN"
             if not login_ok:
@@ -249,8 +252,25 @@ class InitOrchestrator:
                 logger.info("[10/10] Running auto template cropper...")
                 try:
                     from tools.auto_crop_templates import automated_setup_pipeline
-                    automated_setup_pipeline(driver, ocr, serial=serial, watchdog=watchdog)
-                    report["steps"]["template_crop"] = "OK"
+                    crop_report = automated_setup_pipeline(
+                        driver, ocr, serial=serial, watchdog=watchdog,
+                        reply_keywords=self.config.ui_elements.reply_keywords,
+                        send_keywords=self.config.ui_elements.send_keywords,
+                        input_placeholder_keywords=self.config.ui_elements.input_placeholder_keywords
+                    )
+
+                    # Record per-template results from crop report
+                    if crop_report and isinstance(crop_report, dict):
+                        report["steps"]["template_crop"] = crop_report.get("templates", {})
+                        # Warn about failed critical templates
+                        for tpl_name in ["send_button", "reply_button"]:
+                            status = crop_report.get("templates", {}).get(tpl_name, "MISSING")
+                            if status in ("FAILED", "MISSING"):
+                                logger.warning(f"Critical template '{tpl_name}' was not captured: {status}")
+                        if not crop_report.get("success", True):
+                            logger.warning("Template cropping completed with failures. Some features may not work.")
+                    else:
+                        report["steps"]["template_crop"] = "OK"
 
                     # Generate scaled watchdog templates from best available source
                     self._generate_watchdog_templates(base_templates_dir, serial, screenshot_res, ss_w, ss_h)
@@ -285,25 +305,30 @@ class InitOrchestrator:
             logger.info(f"Device profile saved to {profile_path}")
         except Exception as e:
             logger.warning(f"Failed to save device profile: {e}")
-    
-            # 输出报告
-            logger.info(f"Initialization complete. Report: {report}")
-            return report
+
+        # 输出报告
+        logger.info(f"Initialization complete. Report: {report}")
+        return report
 
     # ─────────── Private Methods ───────────
 
     def _check_ocr_health(self) -> bool:
-        """检查 OCR 微服务是否可用。使用 trust_env=False 绕过系统代理。"""
+        """检查 OCR 微服务是否可用（含引擎就绪验证）。使用 trust_env=False 绕过系统代理。"""
         try:
             import requests
             session = requests.Session()
             session.trust_env = False  # 关键：绕过系统 SOCKS 代理
 
-            health_url = self.config.ocr.endpoint.replace("/ocr", "/docs")
-            res = session.get(health_url, timeout=5)
+            health_url = self.config.ocr.endpoint.replace("/ocr", "/health")
+            res = session.get(health_url, timeout=10)
             if res.status_code == 200:
-                logger.info("OCR microservice is healthy.")
-                return True
+                data = res.json()
+                if data.get("engine_ready"):
+                    logger.info(f"OCR microservice is healthy. Engine: {data.get('engine_type', 'unknown')}")
+                    return True
+                else:
+                    logger.error(f"OCR microservice running but engine not ready: {data}")
+                    return False
             else:
                 logger.error(f"OCR microservice returned HTTP {res.status_code}. Please check ocr_server.py.")
                 return False
@@ -370,46 +395,140 @@ class InitOrchestrator:
     def _check_login_status(self, driver, ocr, adb_prefix, package="com.xingin.xhs") -> bool:
         """
         启动 App 并通过 OCR 检测是否已登录。
-        优化：每轮只截图 + OCR 一次，用返回的全部文本做字符串匹配。
-        避免原来每个指标独立调用 OCR 导致的请求爆炸。
+        优化：
+        - 使用 am start -W 同步等待 Activity 就绪（替代 monkey 异步启动）
+        - 自适应等待屏幕稳定后再 OCR（图像差异检测）
+        - 组合指标匹配避免单词误判
+        - 防御性 OCR 结果解析
+        - 区分可恢复/不可恢复异常
         """
         try:
-            # 启动 App
-            subprocess.run(
-                adb_prefix + ["shell", "monkey", "-p", package,
-                              "-c", "android.intent.category.LAUNCHER", "1"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+            # ─── 使用 am start -W 同步等待 Activity 启动完成 ───
+            try:
+                result = subprocess.run(
+                    adb_prefix + ["shell", "am", "start", "-W",
+                                  "-n", f"{package}/com.xingin.xhs.index.v2.IndexActivityV2",
+                                  "-a", "android.intent.action.MAIN",
+                                  "-c", "android.intent.category.LAUNCHER"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if "Error" in result.stderr:
+                    logger.warning(f"am start -W failed, falling back to monkey: {result.stderr[:100]}")
+                    subprocess.run(
+                        adb_prefix + ["shell", "monkey", "-p", package,
+                                      "-c", "android.intent.category.LAUNCHER", "1"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    )
+            except subprocess.TimeoutExpired:
+                logger.warning("am start -W timed out, falling back to monkey")
+                subprocess.run(
+                    adb_prefix + ["shell", "monkey", "-p", package,
+                                  "-c", "android.intent.category.LAUNCHER", "1"],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                )
 
-            login_indicators = ["登录", "注册", "手机号", "验证码登录", "密码登录"]
-            feed_indicators = ["首页", "发现", "购物", "消息", "关注", "推荐"]
+            # ─── 指标词定义 ───
+            # 未登录强指标：任一命中即判定未登录
+            login_strong = ["验证码登录", "密码登录", "手机号登录", "一键登录"]
+            # 未登录弱指标：需配合「无 feed 指标」才判定
+            login_weak = ["登录", "注册"]
+            # 已登录指标 — 底部 tab（小红书 v9.32 实际文案）
+            feed_tab_indicators = ["首页", "搜索", "购物", "我"]
+            # 已登录指标 — 顶部 tab / 页面内容
+            feed_content_indicators = ["关注", "发现", "推荐", "附近", "直播"]
 
-            # 最多 3 轮探测（每轮一次 OCR），总耗时 ≤ 30s
-            for attempt in range(3):
-                time.sleep(3)
-                img = driver.screenshot()
+            # ─── 自适应等待：递增间隔，图像差异检测 ───
+            wait_times = [2, 3, 4, 5, 5]  # 总等待上限 ≤ 19s
+            prev_img = None
+            screenshot_failures = 0
 
-                # 单次 OCR 提取全部文本
+            for attempt, wait_sec in enumerate(wait_times):
+                time.sleep(wait_sec)
+
+                # 截图（不可恢复异常：连续失败说明 ADB 断连）
+                try:
+                    img = driver.screenshot()
+                except Exception as e:
+                    screenshot_failures += 1
+                    logger.error(f"Screenshot failed on attempt {attempt + 1}: {e}")
+                    if screenshot_failures >= 3:
+                        logger.error("Multiple screenshot failures, ADB may be disconnected")
+                        return False
+                    continue
+
+                # 自适应等待：屏幕仍在大幅变化（加载中）则跳过本轮 OCR
+                if prev_img is not None:
+                    try:
+                        diff = cv2.absdiff(
+                            cv2.cvtColor(img, cv2.COLOR_BGR2GRAY),
+                            cv2.cvtColor(prev_img, cv2.COLOR_BGR2GRAY)
+                        )
+                        change_ratio = (diff > 30).sum() / diff.size
+                        if change_ratio > 0.3 and attempt < len(wait_times) - 1:
+                            logger.info(f"Screen still changing ({change_ratio:.1%}), waiting for stability...")
+                            prev_img = img
+                            continue
+                    except Exception:
+                        pass  # 图像对比失败不影响主流程
+                prev_img = img
+
+                # 单次 OCR（可恢复异常：OCR 超时 → 重试下一轮）
                 try:
                     results = ocr.ocr_image(img)
                 except Exception as e:
                     logger.warning(f"Login check OCR attempt {attempt + 1} failed: {e}")
                     continue
 
-                all_text = " ".join([text for _, (text, _) in results]) if results else ""
+                # ─── 防御性解析 OCR 结果 ───
+                texts = []
+                for item in (results or []):
+                    try:
+                        if isinstance(item, (list, tuple)) and len(item) >= 2:
+                            txt_info = item[1]
+                            if isinstance(txt_info, (list, tuple)) and len(txt_info) >= 1:
+                                texts.append(str(txt_info[0]))
+                            elif isinstance(txt_info, str):
+                                texts.append(txt_info)
+                    except Exception:
+                        continue
+                all_text = " ".join(texts)
 
-                if any(ind in all_text for ind in login_indicators):
-                    logger.warning(f"Detected login indicator in screen text: {all_text[:100]}...")
+                if not all_text.strip():
+                    logger.info(f"Attempt {attempt + 1}: OCR returned empty text, screen may still be loading")
+                    continue
+
+                # ─── 组合匹配判定逻辑 ───
+                # 1. 强登录指标：任一命中即判定未登录
+                if any(ind in all_text for ind in login_strong):
+                    logger.warning(f"Login page detected (strong indicator). Screen: {all_text[:100]}...")
                     return False
-                if any(ind in all_text for ind in feed_indicators):
-                    logger.info(f"Feed loaded. Login confirmed. Screen text: {all_text[:80]}...")
+
+                # 2. 已登录指标：底部 tab 命中 ≥ 2 个，或顶部 + 底部各命中 ≥ 1 个
+                tab_hits = sum(1 for ind in feed_tab_indicators if ind in all_text)
+                content_hits = sum(1 for ind in feed_content_indicators if ind in all_text)
+
+                if tab_hits >= 2 or (tab_hits >= 1 and content_hits >= 1):
+                    logger.info(
+                        f"Feed loaded. Login confirmed (tabs={tab_hits}, content={content_hits}). "
+                        f"Screen: {all_text[:80]}..."
+                    )
                     return True
 
-            logger.warning("Could not definitively determine login status after 3 attempts. Assuming logged in.")
+                # 3. 弱登录指标 + 无 feed 指标 → 大概率是登录页
+                if any(ind in all_text for ind in login_weak) and tab_hits == 0 and content_hits == 0:
+                    logger.warning(f"Probable login page (weak indicator, no feed). Screen: {all_text[:100]}...")
+                    return False
+
+                logger.info(
+                    f"Attempt {attempt + 1}: inconclusive (tabs={tab_hits}, content={content_hits}). "
+                    f"Text: {all_text[:80]}..."
+                )
+
+            logger.warning("Could not definitively determine login status after all attempts. Assuming logged in.")
             return True
         except Exception as e:
-            logger.error(f"Login check failed: {e}")
-            return True  # 检测失败时不阻断流程
+            logger.error(f"Login check failed with unexpected error: {e}")
+            return False  # 未知异常不再假定已登录
 
     def _generate_watchdog_templates(self, base_templates_dir, serial, target_res, target_w, target_h):
         """Generate watchdog popup templates by scaling from best available source resolution."""
@@ -496,9 +615,9 @@ class InitOrchestrator:
         return None
 
     def _templates_complete(self, serial, screenshot_res, base_templates_dir) -> bool:
-        """检查该设备的模板文件是否已完整（包括 watchdog 模板）。"""
+        """检查该设备的模板文件是否已完整且质量合格。"""
         required_templates = [
-            "send_button",
+            "send_button", "reply_button",
             "slider_puzzle", "security_verification", "account_frozen",
             "phone_bind", "frequent_operation", "btn_iknow",
             "btn_skip", "btn_update_later", "btn_cancel", "btn_close"
@@ -507,9 +626,16 @@ class InitOrchestrator:
             target_dir = os.path.join(base_templates_dir, serial, screenshot_res)
         else:
             target_dir = os.path.join(base_templates_dir, screenshot_res)
-        
+
+        import numpy as np
         for t in required_templates:
-            if not os.path.exists(os.path.join(target_dir, f"{t}.png")):
+            path = os.path.join(target_dir, f"{t}.png")
+            if not os.path.exists(path):
+                return False
+            # Quality check: reject solid-color / blank templates
+            tpl_img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+            if tpl_img is not None and np.var(tpl_img) < 100:
+                logger.warning(f"Template '{t}' exists but appears blank (variance={np.var(tpl_img):.1f}). Needs re-capture.")
                 return False
         return True
 

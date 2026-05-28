@@ -68,14 +68,39 @@ pip install -r requirements.txt
 ```bash
 python start_ocr_server.py
 # 默认监听 http://localhost:8001
-# 首次启动会自动下载 PaddleOCR 模型（约 100MB）
 ```
 
-验证 OCR 服务：
-```bash
-curl http://localhost:8001/docs
-# 能打开 Swagger 文档页说明启动成功
-```
+#### OCR 引擎与架构设计
+
+OCR 微服务采用 **策略模式 (Strategy Pattern)** 设计，便于灵活插拔与扩展底层引擎。当前支持的 OCR 引擎类型包括：
+
+1. **PaddleOCR (默认)**：
+   - 默认加载 `PP-OCRv4` 中文轻量化模型（`lang="ch"`，首次启动会自动联网下载约 100MB 的模型权重文件）。
+   - 自适应接口：针对 PaddleOCR 新版本自动调用高性能 `predict` 推理 API，对旧版本自动降级使用兼容的 `ocr` API。
+2. **Mock 引擎 (`MockOCREngine`)**：
+   - 虚拟 OCR 引擎，用于开发调试、集成测试或在无 GPU/模型依赖的环境下快速跑通自动化流。
+
+#### 相关环境变量配置
+
+你可以通过以下环境变量配置 OCR 服务的初始参数：
+- `OCR_ENGINE_TYPE`：引擎类型，可选 `paddle` 或 `mock`（默认 `paddle`）。
+- `OCR_LANG`：OCR 识别语言，默认 `ch`（中文）。
+- `OCR_VERSION`：PaddleOCR 模型版本，默认 `PP-OCRv4`。
+
+#### 动态 API 与服务验证
+
+- **API 文档与交互测试**：`http://localhost:8001/docs` (能打开 Swagger 页面说明服务启动正常)。
+- **深度健康检查**：`GET http://localhost:8001/health`
+  - 该端点会执行轻量级空白图片推理探测以验证模型是否已加载完毕并可进行正常推理，返回当前载入的 `engine_type` 详情。
+- **免重启热切换引擎**：`POST http://localhost:8001/config`
+  - 支持在服务不停止的情况下动态切换 OCR 引擎或模型配置。请求 JSON 载荷示例：
+    ```json
+    {
+      "engine_type": "paddle",
+      "lang": "ch",
+      "version": "PP-OCRv4"
+    }
+    ```
 
 ### 2.3 连接 Android 设备
 

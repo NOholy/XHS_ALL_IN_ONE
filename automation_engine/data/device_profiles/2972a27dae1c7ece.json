@@ -11,13 +11,15 @@
     "xhs_installed": "OK",
     "login_status": "LOGGED_IN",
     "ip_rotation": "OK",
-    "template_crop": "OK"
+    "template_crop": {
+      "send_button": "OCR"
+    }
   },
   "success": true,
-  "last_init_time": "2026-05-26T15:57:08.088722+00:00",
+  "last_init_time": "2026-05-27T23:21:49.138260+00:00",
   "screenshot_resolution": "1080x2220",
   "physical_resolution": "1440x2960",
   "android_version": "9",
-  "xhs_version": "9.31.2",
+  "xhs_version": "9.32.0",
   "abi": "arm64-v8a"
 }

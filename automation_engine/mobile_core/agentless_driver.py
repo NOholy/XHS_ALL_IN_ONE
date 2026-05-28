@@ -71,18 +71,30 @@ class AgentlessMinitouchDriver:
         logger.info("Agentless Driver: ADB connection verified.")
 
     def _detect_screen_size(self):
-        """Detect real device screen resolution via ADB."""
+        """Detect device screen resolution via ADB.
+        
+        Prioritizes 'Override size' over 'Physical size' because screenshots
+        and OCR coordinates use the logical (override) resolution.
+        """
         try:
             result = subprocess.run(
                 self.adb_prefix + ["shell", "wm", "size"],
                 capture_output=True, text=True, timeout=5
             )
-            if "Physical size:" in result.stdout:
-                wh = result.stdout.split("Physical size:")[1].strip().split('\n')[0].strip()
+            output = result.stdout
+            # Prefer Override size (matches screenshot/OCR coordinate space)
+            if "Override size:" in output:
+                wh = output.split("Override size:")[1].strip().split('\n')[0].strip()
                 w, h = wh.split("x")
                 self._screen_w = int(w)
                 self._screen_h = int(h)
-                logger.info(f"Device screen size: {self._screen_w}x{self._screen_h}")
+                logger.info(f"Device screen size (override): {self._screen_w}x{self._screen_h}")
+            elif "Physical size:" in output:
+                wh = output.split("Physical size:")[1].strip().split('\n')[0].strip()
+                w, h = wh.split("x")
+                self._screen_w = int(w)
+                self._screen_h = int(h)
+                logger.info(f"Device screen size (physical): {self._screen_w}x{self._screen_h}")
         except Exception as e:
             logger.warning(f"Could not detect screen size: {e}")
 

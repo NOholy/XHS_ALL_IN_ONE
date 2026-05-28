@@ -86,7 +86,7 @@ def _build_components(config):
         circuit_breaker_cooldown=config.ocr.circuit_breaker_cooldown,
     )
     keyboard = KeyboardVisionTyping(driver, vision, ocr)
-    watchdog = PopupWatchdog(vision, driver)
+    watchdog = PopupWatchdog(vision, driver, ocr_client=ocr)
     navigator = XHSNavigator(driver, vision, ocr, config)
     searcher = XHSSearcher(driver, vision, ocr, keyboard, navigator, config)
     reader = PostReader(driver, vision, ocr, config)
@@ -295,6 +295,7 @@ def parse_args():
                                  "farm_only", "mixed"],
                         help="覆盖 auto 模式的运行策略")
     parser.add_argument("--farm-duration", type=int, help="覆盖养号时长(分钟)")
+    
     # 传统参数（extract/reply 专用）
     parser.add_argument("--force", action="store_true", default=False,
                         help="强制重新初始化（跳过幂等检测，全量执行所有步骤）")

@@ -58,3 +58,23 @@ frontend:
   serve_static: false
   # Path to the built frontend assets
   build_dir: "./frontend/dist"
+
+automation:
+  ui_elements:
+    reply_keywords:
+      - "回复"
+      - "Reply"
+      - "reply"
+    send_keywords:
+      - "发送"
+      - "发布"
+      - "Send"
+    input_placeholder_keywords:
+      - "说点什么"
+      - "留下你的"
+      - "发弹幕"
+      - "写评论"
+      - "友好评论"
+      - "善意评论"
+      - "有话要说"
+      - "快来评论"

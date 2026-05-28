@@ -14,10 +14,21 @@ def _load_yaml_config() -> dict:
         "AE_CONFIG_FILE",
         os.path.join(os.path.dirname(__file__), "config.yaml")
     )
+    result = {}
     if os.path.exists(config_path):
         with open(config_path, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f) or {}
-    return {}
+            result = yaml.safe_load(f) or {}
+            
+    # Try loading the global default.yaml
+    global_config_path = os.path.join(os.path.dirname(__file__), "..", "config", "default.yaml")
+    if os.path.exists(global_config_path):
+        with open(global_config_path, "r", encoding="utf-8") as f:
+            global_data = yaml.safe_load(f) or {}
+            if "automation" in global_data:
+                # Merge the automation section from global config
+                result = _deep_merge(result, global_data["automation"])
+                
+    return result
 
 
 def _env(key: str, default=None, cast=None):
@@ -30,6 +41,14 @@ def _env(key: str, default=None, cast=None):
     if cast is not None:
         return cast(val)
     return val
+
+
+@dataclass
+class UIElementsConfig:
+    """UI 元素与交互关键字配置"""
+    reply_keywords: list = field(default_factory=list)
+    send_keywords: list = field(default_factory=list)
+    input_placeholder_keywords: list = field(default_factory=list)
 
 
 @dataclass
@@ -192,6 +211,7 @@ class EngineConfig:
     farm: FarmConfig = field(default_factory=FarmConfig)
     intercept: InterceptConfig = field(default_factory=InterceptConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
+    ui_elements: UIElementsConfig = field(default_factory=UIElementsConfig)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:

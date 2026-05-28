@@ -157,6 +157,24 @@ def process_ocr(request: ImageRequest):
         logger.error(f"OCR processing failed: {e}")
         return {"status": "error", "message": str(e)}
 
+@app.get("/health")
+def health_check():
+    """健康检查端点：验证 OCR 引擎已初始化且可正常推理。"""
+    try:
+        engine = engine_manager.current_engine
+        if engine is None:
+            return {"status": "unhealthy", "engine_ready": False, "message": "No engine loaded"}
+
+        # 用一张小空白图做轻量级推理探测，验证引擎真正可用
+        test_img = np.zeros((20, 20, 3), dtype=np.uint8)
+        engine.process(test_img)
+
+        engine_type = type(engine).__name__
+        return {"status": "healthy", "engine_ready": True, "engine_type": engine_type}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {"status": "unhealthy", "engine_ready": False, "message": str(e)}
+
 @app.post("/config")
 def update_config(request: ConfigRequest):
     try:
