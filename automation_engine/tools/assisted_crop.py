@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 from mobile_core.agentless_driver import AgentlessMinitouchDriver
 from mobile_core.ocr_client import OCRClient
 from mobile_core.logger import get_logger
-from tools.auto_crop_templates import crop_and_save_via_ocr, _parse_ocr_results, _auto_detect_serial
+from tools.auto_crop_templates import crop_and_save_via_ocr, _parse_ocr_results, _auto_detect_serial, crop_fixed_region
 
 logger = get_logger("assisted_crop")
 
@@ -24,10 +24,10 @@ logger = get_logger("assisted_crop")
 # Maps template_name -> (OCR keyword, description, prerequisite, y_min_ratio)
 # y_min_ratio: only match OCR results below this screen ratio (0.0 = anywhere, 0.9 = bottom 10%)
 TEMPLATE_REGISTRY = {
-    "tab_home":       ("首页",     "底部导航栏 - 首页",           "在首页即可",                    0.9),
-    "tab_profile":    ("我",       "底部导航栏 - 我",             "在首页即可",                    0.9),
-    "tab_message":    ("消息",     "底部导航栏 - 消息",           "在首页即可",                    0.9),
-    "search_input":   ("搜索",     "首页顶部搜索入口",            "在首页即可",                    0.0),
+    "tab_home":       ("首页",     "底部导航栏 - 首页",           "在首页即可",                    (0.0, 0.92, 0.2, 1.0)),
+    "tab_profile":    ("我",       "底部导航栏 - 我",             "在首页即可",                    (0.8, 0.92, 1.0, 1.0)),
+    "tab_message":    ("消息",     "底部导航栏 - 消息",           "在首页即可",                    (0.6, 0.92, 0.8, 1.0)),
+    "search_input":   ("搜索",     "首页顶部搜索入口",            "在首页即可",                    (0.8, 0.03, 1.0, 0.1)),
     "comment_input":  ("说点什么", "帖子底部评论输入框",          "打开一篇有评论区的帖子",         0.8),
     "send_button":    ("发送",     "评论发送按钮",               '点击"说点什么"后输入任意文字，右侧出现"发送"', 0.5),
     "reply_button":   ("回复",     "评论区的回复按钮",            "打开一篇有评论的帖子，向下滑动到评论区", 0.3),
@@ -126,11 +126,23 @@ def cmd_crop(driver, ocr, keyword, name, serial, exact, force):
     if name in TEMPLATE_REGISTRY:
         y_min_ratio = TEMPLATE_REGISTRY[name][3]
     
-    logger.info(f"正在查找关键字 '{keyword}' 以裁剪模板 '{name}'（y_min_ratio={y_min_ratio}）...")
-    success, path = crop_and_save_via_ocr(
-        driver, ocr, keyword, name, serial,
-        exact_match=exact, y_min_ratio=y_min_ratio
-    )
+    if isinstance(y_min_ratio, tuple):
+        # This is a fixed crop ratio (left_ratio, top_ratio, right_ratio, bottom_ratio)
+        logger.info(f"使用固定坐标比例裁剪模板 '{name}' {y_min_ratio}...")
+        img = driver.screenshot()
+        h, w = img.shape[:2]
+        left = int(w * y_min_ratio[0])
+        top = int(h * y_min_ratio[1])
+        right = int(w * y_min_ratio[2])
+        bottom = int(h * y_min_ratio[3])
+        box = (left, top, right, bottom)
+        success, path = crop_fixed_region(driver, name, serial, box)
+    else:
+        logger.info(f"正在查找关键字 '{keyword}' 以裁剪模板 '{name}'（y_min_ratio={y_min_ratio}）...")
+        success, path = crop_and_save_via_ocr(
+            driver, ocr, keyword, name, serial,
+            exact_match=exact, y_min_ratio=y_min_ratio
+        )
 
     if success:
         print(f"\n✅ 模板 '{name}' 采集成功！")
