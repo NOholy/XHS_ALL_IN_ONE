@@ -75,25 +75,30 @@ class XHSNavigator:
             logger.info("Already on home feed.")
             return True
 
-        # 尝试通过固定的底部Tab坐标点击回到首页（代替不稳定的模板匹配）
+        logger.info("Not on home feed. Starting smart backtrack to home...")
+        # 智能回退：连续按返回键，直到状态变成首页
+        for _ in range(5):
+            self.go_back()
+            self.driver.human_sleep(1.0, 0.5)
+            
+            current = self.detect_current_page()
+            if current == PAGE_HOME_FEED:
+                logger.info("Successfully returned to home feed.")
+                return True
+                
+            if current == PAGE_UNKNOWN:
+                logger.debug("Current page unknown, continuing to press back...")
+
+        # 假如连续返回 5 次还没到首页，可能是卡在某个特殊的根页面。
+        # 此时尝试点击底部的首页 Tab 作为最终兜底
+        logger.warning("Backtrack loop failed to reach home. Trying bottom tab fallback.")
         w_screen, h_screen = self.driver.get_screen_size()
-        tab_y = int(h_screen * 0.96)  # Bottom 4% is usually the center of the tab
-        tab_x = w_screen // 10        # Center of the 1st tab (out of 5)
-        
-        logger.info(f"Clicking home tab at fixed coordinate ({tab_x}, {tab_y})")
+        tab_y = int(h_screen * 0.96)
+        tab_x = w_screen // 10
         self.driver.physical_tap(tab_x, tab_y)
         self.driver.human_sleep(2.0, 1.0)
-        return True
-
-        # Fallback: 连续按返回键
-        for _ in range(5):
-            self.driver.press_back()
-            self.driver.human_sleep(1.0, 0.5)
-            if self.detect_current_page() == PAGE_HOME_FEED:
-                return True
-
-        logger.warning("Failed to navigate to home feed.")
-        return False
+        
+        return self.detect_current_page() == PAGE_HOME_FEED
 
     def go_search(self):
         """从首页进入搜索页"""
@@ -107,7 +112,7 @@ class XHSNavigator:
             logger.info(f"Clicking search icon at ({search_icon['x']}, {search_icon['y']})")
             self.driver.physical_tap(search_icon['x'], search_icon['y'])
             self.driver.human_sleep(2.0, 1.0)
-            return True
+            return self.detect_current_page() == PAGE_SEARCH
 
         # 2. Fallback: OCR 查找 "搜索" 文字
         matches = self.ocr.find_text(img, "搜索", conf_threshold=0.7)
@@ -116,17 +121,22 @@ class XHSNavigator:
             logger.info(f"OCR found '搜索' at ({target['x']}, {target['y']})")
             self.driver.physical_tap(target['x'], target['y'])
             self.driver.human_sleep(2.0, 1.0)
-            return True
+            return self.detect_current_page() == PAGE_SEARCH
 
         # 3. Fallback: 点击顶部右侧区域（搜索图标的常见位置）
         w = self.config.device.screen_width
         logger.info(f"Fallback: tapping search area at ({int(w * 0.85)}, 120)")
         self.driver.physical_tap(int(w * 0.85), 120)
         self.driver.human_sleep(2.0, 1.0)
-        return True
+        
+        return self.detect_current_page() == PAGE_SEARCH
 
     def go_profile(self):
         """进入个人主页"""
+        # 必须确保在首页，否则底部 Tab 坐标是错的
+        self.go_home()
+        self.driver.human_sleep(1.0, 0.5)
+
         # 强制使用底部固定坐标点击“我”Tab
         w_screen, h_screen = self.driver.get_screen_size()
         tab_y = int(h_screen * 0.96)
@@ -135,16 +145,15 @@ class XHSNavigator:
         logger.info(f"Clicking profile tab at fixed coordinate ({tab_x}, {tab_y})")
         self.driver.physical_tap(tab_x, tab_y)
         self.driver.human_sleep(2.0, 1.0)
-        return True
-        self.driver.human_sleep(2.0, 1.0)
-        return True
+        
+        return self.detect_current_page() == PAGE_PROFILE
 
     def go_back(self):
-        """智能返回：先尝试视觉关闭按钮，再用物理Back键"""
-        img = self.driver.screenshot()
+        """智能返回：先尝试视觉关闭按钮，再用物理Back键（带键盘吸附防御）"""
+        img_before = self.driver.screenshot()
 
         # 尝试点击关闭按钮
-        close_btn = self.vision.find_template(img, "close_button", threshold=0.7)
+        close_btn = self.vision.find_template(img_before, "close_button", threshold=0.7)
         if close_btn:
             logger.info(f"Clicking close button at ({close_btn['x']}, {close_btn['y']})")
             self.driver.physical_tap(close_btn['x'], close_btn['y'])
@@ -154,6 +163,18 @@ class XHSNavigator:
         # Fallback: 物理返回键
         self.driver.press_back()
         self.driver.human_sleep(1.0, 0.5)
+        
+        # Watchdog: 键盘吸附/卡死校验
+        img_after = self.driver.screenshot()
+        import numpy as np
+        if img_before is not None and img_after is not None:
+            if img_before.shape == img_after.shape:
+                err = np.sum((img_before.astype("float") - img_after.astype("float")) ** 2)
+                err /= float(img_before.shape[0] * img_before.shape[1] * img_before.shape[2])
+                if err < 1.0:
+                    logger.warning(f"Back key absorbed (MSE={err:.2f}). Triggering double-back.")
+                    self.driver.press_back()
+                    self.driver.human_sleep(1.0, 0.5)
 
     def ensure_app_foreground(self, package_name="com.xingin.xhs"):
         """确保 XHS App 在前台"""

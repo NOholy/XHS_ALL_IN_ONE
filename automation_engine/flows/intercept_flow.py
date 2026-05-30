@@ -136,8 +136,29 @@ class InterceptOrchestrator:
                     # Watchdog: 进入帖子前检查
                     self._safe_screen_check()
 
-                    # 4c. 进入帖子 + 提取内容
-                    post_data = self.reader.enter_and_extract(target['x'], target['y'])
+                    # 4c. 进入帖子 + 状态校验 + 提取内容
+                    logger.info(f"Entering post at ({target['x']}, {target['y']})")
+                    self.driver.physical_tap(target['x'], target['y'])
+                    self.driver.human_sleep(3.0, 1.0)
+                    
+                    if self.navigator.detect_current_page() != "post_detail":
+                        logger.warning("Failed to enter post_detail page. Skipping this post.")
+                        continue
+                        
+                    post_data = self.reader.extract_current_post()
+                    
+                    # Watchdog: 特征锚点（目标身份）双重校验
+                    # 将外面的 target['title'] (如果有的话) 拿进去核对
+                    expected_title = target.get('title', '').strip()
+                    if expected_title:
+                        # 从长标题中取一段具有辨识度的子串（前几字或中间）
+                        anchor = expected_title[:4] if len(expected_title) > 4 else expected_title
+                        desc = " ".join(post_data.get('description', []))
+                        if anchor not in desc:
+                            logger.error(f"[Identity Mismatch] Expected anchor '{anchor}' not found in post description! Clicked ad or wrong post.")
+                            self.navigator.go_home()
+                            continue
+                        logger.info(f"[Identity Verified] Content anchor '{anchor}' matched successfully.")
 
                     # Watchdog: 评论前检查
                     if not self._safe_screen_check():

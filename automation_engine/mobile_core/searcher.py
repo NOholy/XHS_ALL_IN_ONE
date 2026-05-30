@@ -29,27 +29,31 @@ class XHSSearcher:
         """
         logger.info(f"Searching for keyword: '{keyword}'")
 
-        # 1. 导航到搜索页
-        self.navigator.go_search()
+        # 1. 导航到搜索页并强制校验
+        if not self.navigator.go_search():
+            logger.error("Failed to reach search page! Aborting search to prevent blind text injection.")
+            return []
+            
         self.driver.human_sleep(1.5, 0.5)
 
-        # 2. 定位搜索输入框并输入
-        img = self.driver.screenshot()
-        search_input = self.vision.find_template(img, "search_input", threshold=0.65)
+        # 2. 点击搜索框获取焦点
+        img_before_click = self.driver.screenshot()
+        search_input = self.vision.find_template(img_before_click, "search_input", threshold=0.65)
         if search_input:
-            logger.info(f"Tapping search input at ({search_input['x']}, {search_input['y']})")
             self.driver.physical_tap(search_input['x'], search_input['y'])
         else:
-            # Fallback: OCR 查找输入框提示文字
-            hints = self.ocr.find_text(img, "搜索", conf_threshold=0.5)
-            if hints:
-                self.driver.physical_tap(hints[0]['x'], hints[0]['y'])
-            else:
-                # Fallback: 点击顶部中央
-                w = self.config.device.screen_width
-                self.driver.physical_tap(int(w * 0.5), 120)
+            # Fallback: 点击顶部中央
+            w = self.config.device.screen_width
+            self.driver.physical_tap(int(w * 0.5), 120)
 
         self.driver.human_sleep(1.0, 0.5)
+        
+        # Watchdog: 校验键盘是否真的弹起（使用绝对的 OCR 语义特征，无视视频干扰）
+        img_after_click = self.driver.screenshot()
+        matches = self.ocr.find_text(img_after_click, "搜索", conf_threshold=0.6)
+        if not matches:
+            logger.error("Keyboard 'Search' button not found after clicking search input. Aborting search.")
+            return []
 
         # 3. 输入关键词
         logger.info(f"Typing keyword: '{keyword}'")
@@ -81,6 +85,8 @@ class XHSSearcher:
             results = self._extract_search_results()
             all_results.extend(results)
 
+            img_before_swipe = self.driver.screenshot()
+            
             # 下滑加载更多
             self.driver.human_swipe("down")
             self.driver.human_sleep(
@@ -88,6 +94,20 @@ class XHSSearcher:
                 (self.config.risk_control.search_cooldown_max -
                  self.config.risk_control.search_cooldown_min) / 3
             )
+            
+            # Watchdog: 校验采集是否滑到底或者卡死
+            img_after_swipe = self.driver.screenshot()
+            import numpy as np
+            if img_before_swipe is not None and img_after_swipe is not None:
+                h, w = img_before_swipe.shape[:2]
+                roi_b = img_before_swipe[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
+                roi_a = img_after_swipe[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
+                if roi_b.shape == roi_a.shape and roi_b.size > 0:
+                    err = np.sum((roi_b.astype("float") - roi_a.astype("float")) ** 2)
+                    err /= float(roi_b.size)
+                    if err < 1.0:
+                        logger.info(f"Search feed stuck or reached end (MSE={err:.2f}). Breaking scroll loop early.")
+                        break
 
         # 去重（基于坐标聚类）
         return self._deduplicate_results(all_results)

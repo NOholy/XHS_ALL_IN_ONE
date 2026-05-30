@@ -249,7 +249,9 @@ def action_scan(config):
 def action_extract(config, x, y):
     """提取帖子内容"""
     components = _build_components(config)
-    result = components["reader"].enter_and_extract(x, y)
+    components["driver"].physical_tap(x, y)
+    components["driver"].human_sleep(4.0, 1.0)
+    result = components["reader"].extract_current_post()
     print("\n--- EXTRACTED DATA ---")
     print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     print("----------------------\n")

@@ -10,6 +10,8 @@ import time
 import numpy as np
 from datetime import datetime
 from .logger import get_logger
+from .watchdog import PopupWatchdog
+from .exceptions import RiskControlTriggered
 
 logger = get_logger("farmer")
 
@@ -29,6 +31,10 @@ class AccountFarmer:
         self.reader = reader
         self.commenter = commenter
         self.config = config
+        
+        # 全局风控看门狗
+        self.watchdog = PopupWatchdog(self.vision, self.driver, self.ocr)
+        
         # 会话统计
         self.stats = {
             "scrolls": 0, "posts_entered": 0,
@@ -117,6 +123,16 @@ class AccountFarmer:
         while time.time() < end_time and step < self.config.farm.farming_steps:
             step += 1
             logger.info(f"Farm step {step}, elapsed: {int(time.time()-self.session_start_time)}s")
+            
+            # Watchdog: 全局风控雷达扫描
+            # 如果遇到轻微弹窗，这里会自动处理并继续；
+            # 如果遇到致命弹窗（如滑块验证），会抛出 RiskControlTriggered，直接熔断停机！
+            try:
+                self.watchdog.check_and_handle()
+            except RiskControlTriggered as e:
+                logger.critical(f"FATAL RISK DETECTED: {e}")
+                logger.critical("🚨 HALTING ALL FARMING OPERATIONS IMMEDIATELY 🚨")
+                break  # 强制终止整个养号会话
 
             # 核心行为分支（基于配置的概率）
             roll = random.random()
@@ -136,9 +152,26 @@ class AccountFarmer:
         self._log_session_summary(time.time() - self.session_start_time)
 
     def _browse_feed(self):
-        """信息流浏览 + 随机停顿"""
+        """信息流浏览 + 随机停顿，并校验是否真实滑动了"""
+        img_before = self.driver.screenshot()
         self.driver.human_swipe("down")
+        self.driver.human_sleep(1.0, 0.5)
+        img_after = self.driver.screenshot()
+        
+        # 截取中间一块较大的区域计算视觉差，验证是否滑动成功
+        if img_before is not None and img_after is not None:
+            h, w = img_before.shape[:2]
+            roi_b = img_before[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
+            roi_a = img_after[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
+            if roi_b.shape == roi_a.shape and roi_b.size > 0:
+                err = np.sum((roi_b.astype("float") - roi_a.astype("float")) ** 2)
+                err /= float(roi_b.shape[0] * roi_b.shape[1] * roi_b.shape[2])
+                if err < 1.0: # 极小变化，没划动
+                    logger.warning(f"Browse feed failed: Screen seems stuck (MSE={err:.2f})")
+                    return
+                    
         self.stats["scrolls"] += 1
+        logger.info(f"Browse feed successful (scroll #{self.stats['scrolls']})")
 
         # 偶尔停下来"看"几秒（模拟真人扫视）
         if random.random() < 0.2:
@@ -154,21 +187,56 @@ class AccountFarmer:
         img = self.driver.screenshot()
         cards = self.vision.detect_cards_waterfall(img)
 
+        anchor_text = ""
         if cards:
             card = random.choice(cards)
             x, y = card['x'], card['y']
+            
+            # Watchdog: 进门前记住长相 (Extract feature anchor)
+            # 裁剪卡片区域
+            cw, ch = card.get('w', 300), card.get('h', 400)
+            cx, cy = max(0, x - cw//2), max(0, y - ch//2)
+            card_img = img[cy:cy+ch, cx:cx+cw]
+            try:
+                ocr_results = self.reader.ocr.ocr_image(card_img)
+                for line in (ocr_results or []):
+                    _, (text, conf) = line
+                    if conf > 0.6 and len(text) >= 2:
+                        # 选最长的一段话或者第一段话作为锚点
+                        anchor_text = text[:6] if len(text) > 6 else text
+                        break
+            except Exception as e:
+                logger.debug(f"Failed to extract anchor: {e}")
         else:
             w = self.config.device.screen_width
             h = self.config.device.screen_height
             x = random.choice([int(w * 0.25), int(w * 0.75)])
             y = random.randint(int(h * 0.3), int(h * 0.8))
 
-        logger.info(f"Entering post at ({x}, {y})")
+        logger.info(f"Entering post at ({x}, {y}) [Anchor: '{anchor_text}']")
         self.driver.physical_tap(x, y)
+        self.driver.human_sleep(3.0, 1.0)
+        
+        # 强制状态校验
+        current_page = self.navigator.detect_current_page()
+        if current_page != "post_detail":
+            logger.warning(f"Failed to enter post (state is {current_page}). Skipping interaction.")
+            return
+
         self.stats["posts_entered"] += 1
 
         # 提取内容
-        post_context = self.reader.enter_and_extract(x, y)
+        post_context = self.reader.extract_current_post()
+        
+        # Watchdog: 进门后核对身份 (Verify feature anchor)
+        if anchor_text:
+            desc = " ".join(post_context.get("description", []))
+            author = post_context.get("author", "")
+            if anchor_text not in desc and anchor_text not in author:
+                logger.error(f"[Identity Mismatch] Anchor '{anchor_text}' not found in post. Likely clicked ad or wrong post. Aborting.")
+                self.navigator.go_home()
+                return
+            logger.info(f"[Identity Verified] Content anchor '{anchor_text}' matched successfully.")
 
         # 动态阅读时间
         desc_len = sum(len(line) for line in post_context.get("description", []))
@@ -183,8 +251,14 @@ class AccountFarmer:
         comment_prob = getattr(self.config.farm, "comment_probability", 0.01) * fatigue * self.persona_multipliers.get("comment", 1.0)
         follow_prob = getattr(self.config.farm, "follow_probability", 0.005) * fatigue
 
+        def assert_post_state():
+            if self.navigator.detect_current_page() != "post_detail":
+                logger.error("State drift detected! Left post_detail unexpectedly.")
+                return False
+            return True
+
         liked = False
-        if random.random() < like_prob:
+        if random.random() < like_prob and assert_post_state():
             liked = self._try_like()
 
         # 连击概率加成
@@ -192,48 +266,77 @@ class AccountFarmer:
             collect_prob *= 3.0
             comment_prob *= 2.0
 
-        if random.random() < collect_prob:
+        if random.random() < collect_prob and assert_post_state():
             self._try_collect()
 
-        if random.random() < follow_prob:
+        if random.random() < follow_prob and assert_post_state():
             self._try_follow()
 
-        if random.random() < comment_prob:
+        if random.random() < comment_prob and assert_post_state():
             self._try_comment(post_context)
 
         # 概率性查看评论
-        if random.random() < getattr(self.config.farm, "scroll_comments_probability", 0.33):
+        if random.random() < getattr(self.config.farm, "scroll_comments_probability", 0.33) and assert_post_state():
             logger.info("Farming: scrolling to view comments")
             self.driver.human_swipe("down")
             self.driver.human_sleep(5.0, 2.0)
 
-        # 退出帖子
-        self.navigator.go_back()
+        # 退出帖子，强制使用强大的 go_home 返回主瀑布流
+        self.navigator.go_home()
         self.driver.human_sleep(1.5, 0.5)
 
-    def _check_visual_change(self, img1, img2, box, threshold=2.0) -> bool:
-        """比较两张图片的指定区域是否有显著变化 (MSE)"""
-        if img1 is None or img2 is None:
+    def _verify_color_shift(self, img_before, img_after, box, target_color="red") -> bool:
+        """精确验证动作发生后，特定区域内目标颜色的像素是否显著增加"""
+        if img_before is None or img_after is None:
             return False
+            
         x, y, bw, bh = box
-        h, w = img1.shape[:2]
-        
-        # Ensure box is within bounds
+        h, w = img_before.shape[:2]
         x = max(0, min(x, w - 1))
         y = max(0, min(y, h - 1))
         bw = max(1, min(bw, w - x))
         bh = max(1, min(bh, h - y))
         
-        roi1 = img1[y:y+bh, x:x+bw]
-        roi2 = img2[y:y+bh, x:x+bw]
+        roi_b = img_before[y:y+bh, x:x+bw]
+        roi_a = img_after[y:y+bh, x:x+bw]
         
-        if roi1.shape != roi2.shape or roi1.size == 0:
+        if roi_b.shape != roi_a.shape or roi_b.size == 0:
             return False
             
-        err = np.sum((roi1.astype("float") - roi2.astype("float")) ** 2)
-        err /= float(roi1.shape[0] * roi1.shape[1] * roi1.shape[2])
-        logger.debug(f"Visual diff MSE for box {box}: {err:.2f}")
-        return err > threshold
+        import cv2
+        hsv_b = cv2.cvtColor(roi_b, cv2.COLOR_BGR2HSV)
+        hsv_a = cv2.cvtColor(roi_a, cv2.COLOR_BGR2HSV)
+        
+        if target_color == "red":
+            # 红色在 HSV 中跨越了 0 和 180 的边界
+            mask_b1 = cv2.inRange(hsv_b, np.array([0, 70, 50]), np.array([10, 255, 255]))
+            mask_b2 = cv2.inRange(hsv_b, np.array([170, 70, 50]), np.array([180, 255, 255]))
+            mask_b = cv2.bitwise_or(mask_b1, mask_b2)
+            
+            mask_a1 = cv2.inRange(hsv_a, np.array([0, 70, 50]), np.array([10, 255, 255]))
+            mask_a2 = cv2.inRange(hsv_a, np.array([170, 70, 50]), np.array([180, 255, 255]))
+            mask_a = cv2.bitwise_or(mask_a1, mask_a2)
+            
+        elif target_color == "yellow":
+            mask_b = cv2.inRange(hsv_b, np.array([15, 70, 50]), np.array([35, 255, 255]))
+            mask_a = cv2.inRange(hsv_a, np.array([15, 70, 50]), np.array([35, 255, 255]))
+        else:
+            return False
+            
+        pixels_b = cv2.countNonZero(mask_b)
+        pixels_a = cv2.countNonZero(mask_a)
+        
+        # 突增判定：判断目标颜色像素是否显著增加（至少增加该区域面积的 3%）
+        threshold = (bw * bh) * 0.03
+        shifted = pixels_a > (pixels_b + threshold)
+        
+        # 绝对值判定：如果点击前它就已经是这个颜色了（例如已经点过赞的帖子），也会被判定为成功
+        is_already_target = pixels_a > (bw * bh * 0.15)
+        
+        success = shifted or is_already_target
+        
+        logger.debug(f"Color shift ({target_color}): before={pixels_b}, after={pixels_a}, shifted={shifted}, already_target={is_already_target}. Result: {success}")
+        return success
 
     def _try_like(self) -> bool:
         """尝试点赞并进行视觉强校验"""
@@ -265,11 +368,12 @@ class AccountFarmer:
             target = matches[0]
             like_x = int(w * 0.65)
             like_y = target['y']
-            box = (max(0, like_x - 30), max(0, like_y - 30), 60, 60)
-            changed = self._check_visual_change(img_before, img_after, box, threshold=2.0)
+            box = (max(0, like_x - 40), max(0, like_y - 40), 80, 80)
+            changed = self._verify_color_shift(img_before, img_after, box, target_color="red")
         else:
-            box = (int(w * 0.8), int(h * 0.4), int(w * 0.2), int(h * 0.4))
-            changed = self._check_visual_change(img_before, img_after, box, threshold=2.0)
+            # 兜底：如果找不到“说点什么”，直接在右下角常见区域寻找变红迹象
+            box = (int(w * 0.6), int(h * 0.8), int(w * 0.4), int(h * 0.2))
+            changed = self._verify_color_shift(img_before, img_after, box, target_color="red")
 
         cooldown = random.randint(
             self.config.risk_control.like_cooldown_min,
@@ -278,12 +382,12 @@ class AccountFarmer:
         self.driver.human_sleep(float(cooldown), 1.0)
         
         if changed:
-            logger.info("Like verification passed (visual diff).")
+            logger.info("Like verification passed (red color shift detected).")
             self.stats["likes"] += 1
             self._save_record("like")
             return True
         else:
-            logger.warning("Like verification failed (no visual change).")
+            logger.warning("Like verification failed (no red color shift). Potential video background noise or network failure.")
             return False
 
     def _try_collect(self):
@@ -308,12 +412,12 @@ class AccountFarmer:
             self.driver.human_sleep(1.5, 0.5)
             img_after = self.driver.screenshot()
             
-            if self._check_visual_change(img_before, img_after, box, threshold=2.0):
-                logger.info("Collect verification passed (visual diff).")
+            if self._verify_color_shift(img_before, img_after, box, target_color="yellow"):
+                logger.info("Collect verification passed (yellow color shift detected).")
                 self.stats["collects"] += 1
                 self._save_record("collect")
             else:
-                logger.warning("Collect verification failed (no visual change).")
+                logger.warning("Collect verification failed (no yellow color shift).")
                 
             self.driver.human_sleep(1.0, 0.5)
         else:
@@ -331,7 +435,7 @@ class AccountFarmer:
                 
                 # 强校验
                 img_after = self.driver.screenshot()
-                if self.ocr.find_text(img_after, "已关注", conf_threshold=0.7):
+                if self.ocr.find_text(img_after, "已关注", conf_threshold=0.7) or self.ocr.find_text(img_after, "互相关注", conf_threshold=0.7):
                     logger.info("Follow verification passed.")
                     self.stats.setdefault("follows", 0)
                     self.stats["follows"] += 1
@@ -383,6 +487,11 @@ class AccountFarmer:
 
         self.navigator.go_search()
         self.driver.human_sleep(2.0, 1.0)
+        
+        if self.navigator.detect_current_page() != "search_page":
+            logger.warning("Failed to reach search page. Skipping random search.")
+            self.navigator.go_home()
+            return
 
         # 简化搜索：只输入和浏览，不提取结果
         img = self.driver.screenshot()
@@ -396,8 +505,18 @@ class AccountFarmer:
                 subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{keyword}'"])
             else:
                 self.keyboard.type_chinese(keyword)
-            # 简单浏览一下搜索结果
+            # 等待搜索结果加载
             self.driver.human_sleep(3.0, 1.0)
+            
+            # Watchdog: 搜索结果后置校验
+            img_after = self.driver.screenshot()
+            cards = self.vision.detect_cards_waterfall(img_after)
+            if not cards:
+                logger.warning(f"Search failed: No cards loaded for '{keyword}'")
+                self.navigator.go_home()
+                return
+            logger.info(f"Search verified: {len(cards)} results loaded.")
+
             self.driver.human_swipe("down")
             self.driver.human_sleep(2.0, 1.0)
 
@@ -409,6 +528,11 @@ class AccountFarmer:
         logger.info("Visiting own profile")
         self.navigator.go_profile()
         self.driver.human_sleep(3.0, 1.5)
+
+        if self.navigator.detect_current_page() != "profile":
+            logger.warning("Failed to reach profile page. Skipping profile interaction.")
+            self.navigator.go_home()
+            return
 
         # 随机滑动浏览自己的内容
         if random.random() < 0.5:

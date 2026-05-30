@@ -120,9 +120,18 @@ class SmartCommenter:
         if live is None:
             live = self.config.intercept.live_mode
 
+        img_before_click = self.driver.screenshot()
         logger.info(f"Tapping reply box at ({reply_x}, {reply_y})")
         self.driver.physical_tap(reply_x, reply_y)
         self.driver.human_sleep(2.0, 1.0)
+        
+        # Watchdog: 校验键盘是否真的弹起（使用绝对的 OCR 语义特征，无视视频干扰）
+        img_after_click = self.driver.screenshot()
+        matches_send = self.ocr.find_text(img_after_click, "发送", conf_threshold=0.6)
+        matches_publish = self.ocr.find_text(img_after_click, "发布", conf_threshold=0.6)
+        if not matches_send and not matches_publish:
+            logger.error("Keyboard 'Send/Publish' button not found after clicking reply box. Aborting comment.")
+            return False
 
         # 输入文本
         logger.info(f"Typing: '{text}' (mode: {self.config.device.typing_mode})")

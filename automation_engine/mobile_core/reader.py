@@ -19,21 +19,17 @@ class PostReader:
         self.ocr = ocr
         self.config = config
 
-    def enter_and_extract(self, x: int, y: int) -> dict:
+    def extract_current_post(self) -> dict:
         """
-        点击坐标进入帖子并提取全部内容。
+        提取当前已经进入的帖子全部内容。
         返回: {"description": [str], "comments": [dict], "author": str}
         """
-        logger.info(f"Entering post at ({x}, {y})")
-        self.driver.physical_tap(x, y)
-        self.driver.human_sleep(4.0, 1.0)
+        logger.info(f"Extracting content from current post...")
 
         result = {
             "description": [],
             "comments": [],
             "author": "",
-            "post_x": x,
-            "post_y": y,
         }
 
         # 1. 提取帖子描述
