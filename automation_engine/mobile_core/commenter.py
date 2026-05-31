@@ -10,6 +10,7 @@ import re
 import time
 import requests
 from .logger import get_logger
+from .ocr_client import OCRClient
 
 logger = get_logger("commenter")
 
@@ -31,6 +32,8 @@ class SmartCommenter:
         self.daily_comment_count = 0
         self._commented_posts = set()
         self._load_dedup_records()
+        # 会话级评论历史（借鉴 ApkClaw 的消息列表累积 + 上下文压缩）
+        self._llm_history = []
 
     # --- 评论生成 ---
 
@@ -64,7 +67,8 @@ class SmartCommenter:
         # 简单的关键词匹配评分
         scored = []
         for tpl in templates:
-            score = sum(1 for word in tpl if word in description)
+            # 按4字符滑窗匹配（中文无空格分词，取短语片段匹配）
+            score = sum(1 for i in range(0, max(1, len(tpl) - 3), 2) if tpl[i:i+4] in description)
             scored.append((score, tpl))
 
         scored.sort(key=lambda x: -x[0])
@@ -73,15 +77,39 @@ class SmartCommenter:
         return random.choice([s[1] for s in scored[:top_n]])
 
     def _generate_llm_comment(self, post_context: dict, keyword: str, prompt_override: str = None) -> str:
-        """调用 LLM API 生成评论"""
+        """
+        调用 LLM API 生成评论。
+        借鉴 ApkClaw 的多轮对话 + 上下文压缩：
+        - System prompt 中注入本次会话已发过的评论摘要，防止重复
+        - 会话历史超过阈值时自动压缩（只保留最近 N 条摘要）
+        """
         cfg = self.config.intercept
         content = " ".join(post_context.get("description", []))[:200] if post_context else ""
 
+        # 构建带历史的消息列表（借鉴 ApkClaw DefaultAgentService 的 messages 列表）
+        history_hint = ""
+        if self._llm_history:
+            recent = self._llm_history[-5:]  # 只展示最近5条
+            history_hint = f"\n你本次会话已经发过的评论：{recent}\n请确保新评论与以上内容完全不同。"
+
+        system_content = (
+            "你是一个真实的小红书用户。"
+            "规则：1) 每条评论必须与之前的评论完全不同 "
+            "2) 15-30字 3) 使用口语化表达 4) 不要使用emoji "
+            "5) 自然地融入对帖子内容的理解"
+            f"{history_hint}"
+        )
+
         template_str = prompt_override or cfg.llm_prompt_template
-        prompt = template_str.format(
+        user_content = template_str.format(
             keyword=keyword,
             content=content
         )
+
+        messages = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_content},
+        ]
 
         try:
             endpoint = cfg.llm_endpoint or "https://api.openai.com/v1/chat/completions"
@@ -93,9 +121,9 @@ class SmartCommenter:
                 },
                 json={
                     "model": cfg.llm_model,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": messages,
                     "max_tokens": 60,
-                    "temperature": 0.8,
+                    "temperature": 0.9,
                 },
                 timeout=15
             )
@@ -103,6 +131,12 @@ class SmartCommenter:
             result = response.json()
             comment = result["choices"][0]["message"]["content"].strip()
             logger.info(f"LLM generated comment: '{comment}'")
+
+            # 记录到会话历史（借鉴 ApkClaw 的上下文压缩：只记摘要前15字）
+            self._llm_history.append(comment[:15])
+            if len(self._llm_history) > 20:
+                self._llm_history = self._llm_history[-10:]  # 滑动窗口压缩
+
             return comment
         except Exception as e:
             logger.error(f"LLM generation failed, falling back to template: {e}")
@@ -142,7 +176,7 @@ class SmartCommenter:
             # Note: adb shell input text doesn't support Chinese natively without ADBKeyboard.
             # We fallback to pure vision keyboard or ADBKeyboard broadcast.
             import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{text}'"])
+            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", text], timeout=10)
             self.driver.human_sleep(1.5, 0.5)
         else:
             self.keyboard.type_chinese(text)
@@ -199,8 +233,8 @@ class SmartCommenter:
         try:
             ocr_results = self.ocr.ocr_image(img)
             check_str = text[:4]  # 检查前4个字符
-            for line in ocr_results:
-                if check_str in line[1][0]:
+            for _, ocr_text, conf in OCRClient.safe_parse_results(ocr_results):
+                if check_str in ocr_text:
                     return True
         except Exception as e:
             logger.error(f"Comment verification OCR failed: {e}")

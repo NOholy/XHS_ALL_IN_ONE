@@ -81,9 +81,13 @@ class PaddleOCREngine(BaseOCREngine):
         else:
             results = self.engine.ocr(img_np)
             formatted = []
-            if results and results[0]:
+            if results and isinstance(results, list) and len(results) > 0 and results[0]:
                 for line in results[0]:
-                    formatted.append(line)
+                    if len(line) == 2:
+                        box = [[float(p[0]), float(p[1])] for p in line[0]]
+                        text = str(line[1][0])
+                        score = float(line[1][1])
+                        formatted.append([box, (text, score)])
             return formatted
 
 # ---------------------------------------------------------
@@ -132,7 +136,7 @@ class OCREngineManager:
     def process_image(self, img_np):
         with self.lock:
             engine = self.current_engine
-        return engine.process(img_np)
+            return engine.process(img_np)
 
 # Initialize global manager
 engine_manager = OCREngineManager()

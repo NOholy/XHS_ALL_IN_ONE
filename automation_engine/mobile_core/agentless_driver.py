@@ -356,6 +356,41 @@ class AgentlessMinitouchDriver:
             logger.error("Screenshot failed", extra={"error": str(e)})
             raise
 
+    def clean_screenshot(self):
+        """
+        Temporarily disable pointer_location and show_touches to take a clean screenshot,
+        then restore their original state. Useful for template collection.
+        """
+        try:
+            # Save current state
+            pl_res = subprocess.run(self.adb_prefix + ["shell", "settings", "get", "system", "pointer_location"], capture_output=True, text=True, timeout=3)
+            st_res = subprocess.run(self.adb_prefix + ["shell", "settings", "get", "system", "show_touches"], capture_output=True, text=True, timeout=3)
+            pl_orig = pl_res.stdout.strip()
+            st_orig = st_res.stdout.strip()
+            
+            pl_on = (pl_orig == "1")
+            st_on = (st_orig == "1")
+            
+            # Disable if needed
+            if pl_on:
+                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "pointer_location", "0"], timeout=3)
+            if st_on:
+                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "show_touches", "0"], timeout=3)
+                
+            # Take screenshot
+            img = self.screenshot()
+            
+            # Restore state
+            if pl_on:
+                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "pointer_location", "1"], timeout=3)
+            if st_on:
+                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "show_touches", "1"], timeout=3)
+                
+            return img
+        except Exception as e:
+            logger.error("Clean screenshot failed, falling back to standard screenshot", extra={"error": str(e)})
+            return self.screenshot()
+
     def ensure_app_foreground(self, package_name="com.xingin.xhs"):
         logger.info(f"Using ADB monkey to launch app {package_name} stealthily.")
         cmd = self.adb_prefix + ["shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"]
@@ -420,27 +455,33 @@ class AgentlessMinitouchDriver:
             subprocess.run(self.adb_prefix + ["shell", "input", "tap", str(nx), str(ny)])
 
     def physical_swipe(self, sx, sy, ex, ey):
-        """Bezier curve physical swipe. Uses minitouch if available."""
+        """Cubic Bezier curve physical swipe with Ease-Out inertia."""
         if self._mt_available:
-            num_points = random.randint(18, 28)
-            points = self._generate_bezier_curve(sx, sy, ex, ey, num_points)
+            num_points = random.randint(25, 40) # 更多的点使得滑动更细腻
+            points = self._generate_cubic_bezier_curve(sx, sy, ex, ey, num_points)
             pressure = random.randint(40, 80)
 
-            logger.info(f"Minitouch Bezier swipe from ({sx},{sy}) to ({ex},{ey}), {num_points} points")
+            logger.info(f"Minitouch Cubic Bezier swipe from ({sx},{sy}) to ({ex},{ey}), {num_points} points")
             mt_x, mt_y = self._scale_coords(points[0][0], points[0][1])
             self._mt_send(f"d 0 {mt_x} {mt_y} {pressure}")
             self._mt_send("c")
             time.sleep(random.uniform(0.02, 0.05))
 
+            # Total swipe duration ~ 200-400ms depending on speed
+            # Using Ease-Out algorithm: starts fast (short sleep), ends slow (longer sleep)
             for i, (px, py) in enumerate(points[1:]):
                 mt_x, mt_y = self._scale_coords(px, py)
                 self._mt_send(f"m 0 {mt_x} {mt_y} {pressure}")
                 self._mt_send("c")
-                # Non-linear velocity: slow at start/end, fast in middle
-                if i < num_points * 0.2 or i > num_points * 0.8:
-                    time.sleep(random.uniform(0.012, 0.022))
-                else:
-                    time.sleep(random.uniform(0.004, 0.009))
+                
+                # Calculate progress [0, 1]
+                progress = (i + 1) / (num_points - 1)
+                # Ease-Out cubic inverse for time sleep (closer to 1 = longer sleep)
+                # 初始速度极快(sleep小)，末端因为摩擦力极慢(sleep大)
+                sleep_time = 0.003 + (progress ** 3) * 0.035
+                # 加入极微小的网络抖动
+                sleep_time += random.uniform(-0.001, 0.002)
+                time.sleep(max(0.001, sleep_time))
 
             self._mt_send("u 0")
             self._mt_send("c")
@@ -451,17 +492,69 @@ class AgentlessMinitouchDriver:
                                      str(int(sx)), str(int(sy)), str(int(ex)), str(int(ey)), str(duration)]
             subprocess.run(cmd)
 
-    def _generate_bezier_curve(self, start_x, start_y, end_x, end_y, num_points=20):
-        """Generate quadratic Bezier curve points with random control point."""
-        ctrl_x = start_x + (end_x - start_x) / 2 + random.uniform(-150, 150)
-        ctrl_y = start_y + (end_y - start_y) / 2 + random.uniform(-150, 150)
+    def _generate_cubic_bezier_curve(self, start_x, start_y, end_x, end_y, num_points=30):
+        """Generate Cubic Bezier curve points simulating human thumb arc."""
+        # 模拟大拇指滑动时的弧线，添加两个控制点
+        # 偏右手的拇指滑动通常会向左或向右微凸
+        offset_x = random.uniform(20, 100) if random.random() > 0.5 else random.uniform(-100, -20)
+        
+        ctrl1_x = start_x + (end_x - start_x) * 0.3 + offset_x + random.uniform(-20, 20)
+        ctrl1_y = start_y + (end_y - start_y) * 0.3 + random.uniform(-50, 50)
+        
+        ctrl2_x = start_x + (end_x - start_x) * 0.7 + offset_x * 0.5 + random.uniform(-20, 20)
+        ctrl2_y = start_y + (end_y - start_y) * 0.7 + random.uniform(-50, 50)
 
         points = []
         for t in np.linspace(0, 1, num_points):
-            x = (1 - t) ** 2 * start_x + 2 * (1 - t) * t * ctrl_x + t ** 2 * end_x
-            y = (1 - t) ** 2 * start_y + 2 * (1 - t) * t * ctrl_y + t ** 2 * end_y
-            points.append((int(x), int(y)))
+            x = (1 - t)**3 * start_x + 3 * (1 - t)**2 * t * ctrl1_x + 3 * (1 - t) * t**2 * ctrl2_x + t**3 * end_x
+            y = (1 - t)**3 * start_y + 3 * (1 - t)**2 * t * ctrl1_y + 3 * (1 - t) * t**2 * ctrl2_y + t**3 * end_y
+            # 引入极细微的高频抖动 (Jitter)
+            jitter_x = random.uniform(-2, 2)
+            jitter_y = random.uniform(-2, 2)
+            points.append((int(x + jitter_x), int(y + jitter_y)))
         return points
+
+    def micro_swipe(self, max_distance=40):
+        """Micro swipe to simulate reading attention and keep connection alive."""
+        w = self._screen_w or 540
+        h = self._screen_h or 1170
+        
+        sx = w / 2 + random.uniform(-80, 80)
+        sy = h * random.uniform(0.4, 0.6)
+        
+        # 随机决定是向上看还是向下看 (位移小)
+        direction = 1 if random.random() > 0.4 else -1
+        distance = random.uniform(15, max_distance) * direction
+        
+        ex = sx + random.uniform(-10, 10)
+        ey = sy - distance # 负数是向上移，也就是向下看
+        
+        logger.info(f"Micro swipe (attention simulation): dist={distance:.1f}px")
+        
+        if self._mt_available:
+            num_points = random.randint(8, 15)
+            points = self._generate_cubic_bezier_curve(sx, sy, ex, ey, num_points)
+            pressure = random.randint(30, 60)
+
+            mt_x, mt_y = self._scale_coords(points[0][0], points[0][1])
+            self._mt_send(f"d 0 {mt_x} {mt_y} {pressure}")
+            self._mt_send("c")
+            time.sleep(random.uniform(0.01, 0.03))
+
+            for px, py in points[1:]:
+                mt_x, mt_y = self._scale_coords(px, py)
+                self._mt_send(f"m 0 {mt_x} {mt_y} {pressure}")
+                self._mt_send("c")
+                # 匀速缓慢微划
+                time.sleep(random.uniform(0.015, 0.035))
+
+            self._mt_send("u 0")
+            self._mt_send("c")
+        else:
+            duration = random.randint(200, 400)
+            cmd = self.adb_prefix + ["shell", "input", "swipe",
+                                     str(int(sx)), str(int(sy)), str(int(ex)), str(int(ey)), str(duration)]
+            subprocess.run(cmd)
 
     def human_swipe(self, direction="down"):
         w = self._screen_w or 540

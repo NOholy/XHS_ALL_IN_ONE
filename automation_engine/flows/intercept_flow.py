@@ -225,8 +225,19 @@ class InterceptOrchestrator:
         """伪装浏览：在首页随机浏览几个帖子"""
         self.navigator.go_home()
         for _ in range(count):
+            img_before = self.driver.screenshot()
+            if hasattr(self.farmer, 'loop_detector'):
+                self.farmer.loop_detector.update_screen(img_before)
+
             self.driver.human_swipe("down")
             self.driver.human_sleep(2.0, 1.0)
+            if hasattr(self.farmer, 'loop_detector'):
+                self.farmer.loop_detector.record_action("swipe", "down")
+                if self.farmer.loop_detector.is_stuck():
+                    logger.warning(f"Camouflage browse stuck. {self.farmer.loop_detector.get_suggestion()}")
+                    self.navigator.go_home()
+                    self.farmer.loop_detector.clear()
+                    break
 
             # Watchdog: 浏览中也可能弹窗
             self._safe_screen_check()

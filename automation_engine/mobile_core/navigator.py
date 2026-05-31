@@ -3,6 +3,7 @@ XHS App 纯视觉页面导航器
 封装所有页面跳转逻辑，通过 OCR + 模板匹配判断当前页面并执行导航。
 """
 from .logger import get_logger
+import numpy as np
 
 logger = get_logger("navigator")
 
@@ -22,17 +23,26 @@ class XHSNavigator:
     不依赖任何 UI 树或 Accessibility 服务。
     """
 
-    def __init__(self, driver, vision, ocr, config):
+    def __init__(self, driver, vision, ocr, config, page_detector=None):
         self.driver = driver
         self.vision = vision
         self.ocr = ocr
         self.config = config
+        self.page_detector = page_detector
 
     def detect_current_page(self) -> str:
         """
         通过 OCR + 模板匹配判断当前处于哪个页面。
         返回页面类型常量。
         """
+        # Fast path: Activity 级别检测（~50ms，零风控风险）
+        if self.page_detector:
+            fast_result = self.page_detector.detect_page_fast()
+            if fast_result != "unknown":
+                logger.debug(f"Fast page detection via Activity: {fast_result}")
+                return fast_result
+
+        # Slow path: 截图 + 视觉匹配 + OCR（原有逻辑，作为降级）
         img = self.driver.screenshot()
 
         # 1. 检测搜索结果页（有搜索框+结果列表）
@@ -93,8 +103,8 @@ class XHSNavigator:
         # 此时尝试点击底部的首页 Tab 作为最终兜底
         logger.warning("Backtrack loop failed to reach home. Trying bottom tab fallback.")
         w_screen, h_screen = self.driver.get_screen_size()
-        tab_y = int(h_screen * 0.96)
-        tab_x = w_screen // 10
+        tab_y = int(h_screen * 0.96)  # Tab 栏中心 y 坐标
+        tab_x = int(w_screen * 0.1)   # 首页 Tab (第 1 个)
         self.driver.physical_tap(tab_x, tab_y)
         self.driver.human_sleep(2.0, 1.0)
         
@@ -125,8 +135,9 @@ class XHSNavigator:
 
         # 3. Fallback: 点击顶部右侧区域（搜索图标的常见位置）
         w = self.config.device.screen_width
-        logger.info(f"Fallback: tapping search area at ({int(w * 0.85)}, 120)")
-        self.driver.physical_tap(int(w * 0.85), 120)
+        h = self.config.device.screen_height
+        logger.info(f"Fallback: tapping search area at ({int(w * 0.85)}, {int(h * 0.05)})")
+        self.driver.physical_tap(int(w * 0.85), int(h * 0.05))
         self.driver.human_sleep(2.0, 1.0)
         
         return self.detect_current_page() == PAGE_SEARCH
@@ -166,15 +177,12 @@ class XHSNavigator:
         
         # Watchdog: 键盘吸附/卡死校验
         img_after = self.driver.screenshot()
-        import numpy as np
-        if img_before is not None and img_after is not None:
-            if img_before.shape == img_after.shape:
-                err = np.sum((img_before.astype("float") - img_after.astype("float")) ** 2)
-                err /= float(img_before.shape[0] * img_before.shape[1] * img_before.shape[2])
-                if err < 1.0:
-                    logger.warning(f"Back key absorbed (MSE={err:.2f}). Triggering double-back.")
-                    self.driver.press_back()
-                    self.driver.human_sleep(1.0, 0.5)
+        if hasattr(self.vision, 'compute_screen_mse'):
+            err = self.vision.compute_screen_mse(img_before, img_after)
+            if err < 1.0:
+                logger.warning(f"Back key absorbed (MSE={err:.2f}). Triggering double-back.")
+                self.driver.press_back()
+                self.driver.human_sleep(1.0, 0.5)
 
     def ensure_app_foreground(self, package_name="com.xingin.xhs"):
         """确保 XHS App 在前台"""

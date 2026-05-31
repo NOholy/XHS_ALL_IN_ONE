@@ -107,6 +107,12 @@ class InitOrchestrator:
         report["steps"]["adb_check"] = "OK"
 
         # ═══════════════════════════════════════════
+        # Step 1.5: 检查调试 Overlay (防御性警告)
+        # ═══════════════════════════════════════════
+        logger.info("[1.5/10] Checking debug overlays...")
+        self._check_debug_overlays(adb_prefix)
+
+        # ═══════════════════════════════════════════
         # Step 2: 动态检测屏幕分辨率
         # ═══════════════════════════════════════════
         logger.info("[2/10] Detecting screen resolution...")
@@ -148,8 +154,8 @@ class InitOrchestrator:
         # Step 3: 清理历史 U2 自动化残留
         # ═══════════════════════════════════════════
         logger.info("[3/10] Cleaning up legacy u2 agent residue...")
-        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.github.nicekeyboard"], capture_output=True)
-        subprocess.run(adb_prefix + ["shell", "rm", "-f", "/data/local/tmp/u2.jar"], capture_output=True)
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.github.nicekeyboard"], capture_output=True, timeout=10)
+        subprocess.run(adb_prefix + ["shell", "rm", "-f", "/data/local/tmp/u2.jar"], capture_output=True, timeout=10)
         report["steps"]["cleanup_u2"] = "OK"
 
         # ═══════════════════════════════════════════
@@ -358,6 +364,26 @@ class InitOrchestrator:
             logger.error(f"ADB check exception: {e}")
             return False
 
+    def _check_debug_overlays(self, adb_prefix):
+        """检查并警告是否开启了指针位置或显示触摸"""
+        try:
+            pl_res = subprocess.run(adb_prefix + ["shell", "settings", "get", "system", "pointer_location"], capture_output=True, text=True, timeout=5)
+            st_res = subprocess.run(adb_prefix + ["shell", "settings", "get", "system", "show_touches"], capture_output=True, text=True, timeout=5)
+            
+            pl_enabled = pl_res.stdout.strip() == "1"
+            st_enabled = st_res.stdout.strip() == "1"
+            
+            if pl_enabled or st_enabled:
+                logger.warning(
+                    "\n" + "="*65 + "\n"
+                    " [WARNING] 检测到设备开启了“指针位置”或“显示触摸”。\n"
+                    " 此状态下截图将包含坐标轴和轨迹线，可能会严重降低\n"
+                    " YOLO 目标检测和模板匹配的准确率。如果是生产环境，请手动关闭。\n"
+                    + "="*65
+                )
+        except Exception as e:
+            logger.debug(f"Failed to check debug overlays: {e}")
+
     def _deploy_minitouch(self, driver) -> str:
         """
         检测设备 CPU 架构，自动部署对应的 minitouch 二进制文件。
@@ -417,14 +443,14 @@ class InitOrchestrator:
                     subprocess.run(
                         adb_prefix + ["shell", "monkey", "-p", package,
                                       "-c", "android.intent.category.LAUNCHER", "1"],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10
                     )
             except subprocess.TimeoutExpired:
                 logger.warning("am start -W timed out, falling back to monkey")
                 subprocess.run(
                     adb_prefix + ["shell", "monkey", "-p", package,
                                   "-c", "android.intent.category.LAUNCHER", "1"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10
                 )
 
             # ─── 指标词定义 ───

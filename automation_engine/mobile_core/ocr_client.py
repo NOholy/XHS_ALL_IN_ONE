@@ -97,7 +97,7 @@ class OCRClient:
                 scale = 1600 / max(h, w)
                 image_np = cv2.resize(image_np, (int(w * scale), int(h * scale)))
             
-            _, buffer = cv2.imencode('.jpg', image_np, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            _, buffer = cv2.imencode('.png', image_np)  # Use lossless PNG instead of lossy JPG-80 to preserve text edges
             img_b64 = base64.b64encode(buffer).decode('utf-8')
 
             response = self.session.post(
@@ -126,18 +126,47 @@ class OCRClient:
         except requests.RequestException as e:
             self._breaker.record_failure()
             logger.error("OCR API request failed", extra={"error": str(e)})
-            # Return empty results instead of crashing the automation flow
-            return []
+            # Raise exception rather than returning [] so watchdog knows OCR is DOWN, not screen is empty
+            raise OCRServiceError(f"OCR Request Exception: {e}")
+
+    @staticmethod
+    def safe_parse_results(results):
+        """
+        统一安全解析 OCR raw results，返回 [(box, text, conf), ...]。
+        
+        所有消费 ocr_image() 返回值的代码都应使用此方法，而非直接解构。
+        处理 OCR 微服务可能返回的各种异常数据格式：
+          - 空结果 / None
+          - 缺少 box 或 text 字段
+          - txt_info 为字符串而非 [text, conf] 元组
+          - 数值类型不匹配
+        """
+        parsed = []
+        for line in (results or []):
+            try:
+                if not isinstance(line, (list, tuple)) or len(line) < 2:
+                    continue
+                box = line[0]
+                txt_info = line[1]
+                if isinstance(txt_info, (list, tuple)) and len(txt_info) >= 2:
+                    text, conf = str(txt_info[0]), float(txt_info[1])
+                elif isinstance(txt_info, (list, tuple)) and len(txt_info) >= 1:
+                    text, conf = str(txt_info[0]), 0.0
+                elif isinstance(txt_info, str):
+                    text, conf = txt_info, 0.0
+                else:
+                    continue
+                parsed.append((box, text, conf))
+            except Exception:
+                continue
+        return parsed
 
     def find_text(self, image_np, target_text, conf_threshold=0.7):
         """Find specific text in image and return its bounding box and confidence."""
         results = self.ocr_image(image_np)
         matches = []
-        for line in results:
-            box, (text, conf) = line
+        for box, text, conf in self.safe_parse_results(results):
             if target_text in text and conf >= conf_threshold:
-                # box is a list of 4 points: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-                # return center coordinates
                 x_center = int(sum([p[0] for p in box]) / 4)
                 y_center = int(sum([p[1] for p in box]) / 4)
                 matches.append({"text": text, "x": x_center, "y": y_center, "conf": conf, "box": box})

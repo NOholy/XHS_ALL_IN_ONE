@@ -215,6 +215,16 @@ class ScheduleConfig:
 
 
 @dataclass
+class AgentConfig:
+    """Agent模式配置"""
+    enabled: bool = True
+    llm_endpoint: str = "https://api.deepseek.com/chat/completions"
+    llm_api_key: str = "sk-00463dfa52f145aca59b7c5190d6b8de"
+    llm_model: str = "deepseek-v4-flash"
+    max_iterations: int = 30
+
+
+@dataclass
 class EngineConfig:
     """引擎顶层配置"""
     device: DeviceConfig = field(default_factory=DeviceConfig)
@@ -225,6 +235,7 @@ class EngineConfig:
     intercept: InterceptConfig = field(default_factory=InterceptConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     ui_elements: UIElementsConfig = field(default_factory=UIElementsConfig)
+    agent: AgentConfig = field(default_factory=AgentConfig)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -273,6 +284,8 @@ def load_config() -> EngineConfig:
         "AE_LLM_MODEL": ("intercept", "llm_model", str),
         "AE_RUN_MODE": ("schedule", "run_mode", str),
         "AE_FARM_DURATION": ("farm", "session_duration_minutes", int),
+        "AE_AGENT_LLM_API_KEY": ("agent", "llm_api_key", str),
+        "AE_AGENT_LLM_MODEL": ("agent", "llm_model", str),
     }
     for env_key, (section, attr, cast) in env_overrides.items():
         val = _env(env_key, cast=cast)

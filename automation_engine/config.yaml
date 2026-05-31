@@ -125,3 +125,11 @@ schedule:
   # "farm_then_intercept" | "intercept_only" | "farm_only" | "mixed"
   run_mode: "farm_then_intercept"
   warmup_farm_minutes: 30
+
+agent:
+  enabled: true
+  llm_endpoint: "https://api.deepseek.com/chat/completions"
+  llm_api_key: "sk-00463dfa52f145aca59b7c5190d6b8de"
+  llm_model: "deepseek-v4-flash"
+  max_iterations: 30
+

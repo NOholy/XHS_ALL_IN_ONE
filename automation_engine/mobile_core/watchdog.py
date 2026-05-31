@@ -24,19 +24,51 @@ class PopupWatchdog:
         "关闭": "btn_close",
     }
 
-    def __init__(self, vision_engine, device_driver, ocr_client=None):
+    def __init__(self, vision_engine, device_driver, ocr_client=None, page_detector=None):
         self.vision = vision_engine
         self.driver = device_driver
         self.ocr = ocr_client  # Optional: enables OCR-based fallback
+        self.page_detector = page_detector  # Optional: enables Activity-level detection
 
     def check_screen(self, screen_img):
         """
-        Scan the screen for known risks or popups.
-        Uses pure OCR.
-        Raises exceptions if critical issues are found, or automatically handles minor ones.
+        三层递进检测：
+        1. Activity 级别（~50ms，零风控风险）— 检测系统弹窗和 App 切走
+        2. OCR 关键词扫描（~1s）— 检测 App 内风控弹窗
         """
+        # 第一层：Activity 快速检测（无需截图，无需 OCR）
+        if self.page_detector:
+            self._check_via_activity()
+
+        # 第二层：OCR 关键词检测（原有逻辑）
         if self.ocr is not None:
             self._check_screen_via_ocr(screen_img)
+        elif self.page_detector is None:
+            logger.warning("Watchdog: No detection backend available — popup/risk detection is DISABLED.")
+
+    def _check_via_activity(self):
+        """通过 Activity 名称检测系统级弹窗和 App 切走"""
+        try:
+            # 检测系统弹窗
+            if self.page_detector.is_system_dialog():
+                activity = self.page_detector.get_current_activity()
+                logger.warning(f"System dialog detected via Activity: {activity}")
+                self.driver.press_back()
+                self.driver.human_sleep(1.5, 0.5)
+                raise PopupIntercepted(f"System activity dismissed: {activity}")
+
+            # 检测是否离开了 XHS
+            if not self.page_detector.is_xhs_foreground():
+                pkg = self.page_detector.get_current_package()
+                if pkg:  # 空字符串表示检测失败，不做处理
+                    logger.warning(f"Left XHS! Current foreground: {pkg}")
+                    self.driver.ensure_app_foreground()
+                    self.driver.human_sleep(2.0, 1.0)
+                    raise PopupIntercepted(f"Returned to XHS from {pkg}")
+        except PopupIntercepted:
+            raise
+        except Exception as e:
+            logger.debug(f"Activity-level detection failed (non-critical): {e}")
 
     def _check_screen_via_ocr(self, screen_img):
         """OCR-based popup detection fallback for when templates are unavailable."""

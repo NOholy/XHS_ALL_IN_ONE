@@ -7,6 +7,14 @@ Key design principle: Every action is followed by a screenshot verification step
 import time
 import random
 import urllib.parse
+import sys
+
+# Prevent running outside browser-harness
+if "js" not in globals():
+    print("FATAL: This script must be run via browser-harness, e.g.:")
+    print("       browser-harness < start_single_run.py")
+    sys.exit(1)
+
 
 # ================= CONFIGURATION =================
 DRY_RUN = True

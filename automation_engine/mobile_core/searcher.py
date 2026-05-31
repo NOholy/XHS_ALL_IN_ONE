@@ -4,6 +4,8 @@ XHS 移动端纯视觉搜索器
 """
 import random
 from .logger import get_logger
+import numpy as np
+from .ocr_client import OCRClient
 
 logger = get_logger("searcher")
 
@@ -44,7 +46,8 @@ class XHSSearcher:
         else:
             # Fallback: 点击顶部中央
             w = self.config.device.screen_width
-            self.driver.physical_tap(int(w * 0.5), 120)
+            h = self.config.device.screen_height
+            self.driver.physical_tap(int(w * 0.5), int(h * 0.05))
 
         self.driver.human_sleep(1.0, 0.5)
         
@@ -59,7 +62,7 @@ class XHSSearcher:
         logger.info(f"Typing keyword: '{keyword}'")
         if self.config.device.typing_mode == "clipboard":
             import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{keyword}'"])
+            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", keyword], timeout=10)
         else:
             self.keyboard.type_chinese(keyword)
 
@@ -97,17 +100,13 @@ class XHSSearcher:
             
             # Watchdog: 校验采集是否滑到底或者卡死
             img_after_swipe = self.driver.screenshot()
-            import numpy as np
-            if img_before_swipe is not None and img_after_swipe is not None:
-                h, w = img_before_swipe.shape[:2]
-                roi_b = img_before_swipe[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
-                roi_a = img_after_swipe[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
-                if roi_b.shape == roi_a.shape and roi_b.size > 0:
-                    err = np.sum((roi_b.astype("float") - roi_a.astype("float")) ** 2)
-                    err /= float(roi_b.size)
-                    if err < 1.0:
-                        logger.info(f"Search feed stuck or reached end (MSE={err:.2f}). Breaking scroll loop early.")
-                        break
+            if hasattr(self.vision, 'compute_screen_mse'):
+                h, w = img_before_swipe.shape[:2] if img_before_swipe is not None else (0, 0)
+                roi = (int(w*0.2), int(h*0.3), int(w*0.6), int(h*0.4)) if w > 0 else None
+                err = self.vision.compute_screen_mse(img_before_swipe, img_after_swipe, roi)
+                if err < 1.0:
+                    logger.info(f"Search feed stuck or reached end (MSE={err:.2f}). Breaking scroll loop early.")
+                    break
 
         # 去重（基于坐标聚类）
         return self._deduplicate_results(all_results)
@@ -151,9 +150,9 @@ class XHSSearcher:
         logger.info("Fallback: sending Enter key to submit search")
         if hasattr(self.driver, 'adb_prefix'):
             import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "input", "keyevent", "66"])
+            subprocess.run(self.driver.adb_prefix + ["shell", "input", "keyevent", "66"], timeout=5)
         else:
-            self.driver.press_back()  # 收起键盘后重试
+            logger.warning("No search button found. Skipping search submission.")
 
     def _extract_search_results(self) -> list:
         """OCR 提取当前屏幕上的搜索结果帖子列表"""
@@ -176,8 +175,7 @@ class XHSSearcher:
                 try:
                     ocr_results = self.ocr.ocr_image(card_img)
                     title_parts = []
-                    for line in ocr_results:
-                        _, (text, conf) = line
+                    for _, text, conf in OCRClient.safe_parse_results(ocr_results):
                         if conf > 0.6 and len(text) > 2:
                             title_parts.append(text)
                     card['title'] = " ".join(title_parts[:2]) if title_parts else ""
@@ -189,8 +187,7 @@ class XHSSearcher:
             # 方案2: 全屏 OCR + 网格 Fallback
             try:
                 ocr_results = self.ocr.ocr_image(img)
-                for i, line in enumerate(ocr_results):
-                    box, (text, conf) = line
+                for i, (box, text, conf) in enumerate(OCRClient.safe_parse_results(ocr_results)):
                     if conf > 0.6 and len(text) > 4:
                         x_center = int(sum([p[0] for p in box]) / 4)
                         y_center = int(sum([p[1] for p in box]) / 4)

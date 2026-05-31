@@ -20,7 +20,7 @@ class DeviceOptimizer:
             ("animator_duration_scale", "0.0")
         ]
         for key, val in settings:
-            res = subprocess.run(self.adb_prefix + ["shell", "settings", "put", "global", key, val], capture_output=True, text=True)
+            res = subprocess.run(self.adb_prefix + ["shell", "settings", "put", "global", key, val], capture_output=True, text=True, timeout=10)
             if "SecurityException" in res.stderr:
                 logger.error(f"Permission denied to change {key}. "
                              f"For MIUI/ColorOS/OriginOS, please manually enable 'USB debugging (Security settings)' in Developer Options.")
@@ -36,17 +36,25 @@ class DeviceOptimizer:
                 self.adb_prefix + ["shell", "wm", "size"],
                 capture_output=True, text=True, timeout=5
             )
-            # 优先取 Physical size（避免被 Override size 误导）
+            # 统一使用 Override size（与 agentless_driver.py 和截图坐标空间一致）
+            override_size = None
+            default_size = None
             for line in result.stdout.strip().split('\n'):
-                if "Physical size:" in line:
-                    wh = line.split("Physical size:")[1].strip()
+                if "Override size:" in line:
+                    wh = line.split("Override size:")[1].strip()
                     w, h = wh.split("x")
-                    return int(w), int(h)
-            # Fallback: 取 wm size 的第一行
-            if ":" in result.stdout:
-                wh = result.stdout.strip().split(":")[-1].strip()
-                w, h = wh.split("x")
-                return int(w), int(h)
+                    override_size = (int(w), int(h))
+                elif ":" in line:
+                    wh = line.strip().split(":")[-1].strip()
+                    try:
+                        w, h = wh.split("x")
+                        default_size = (int(w), int(h))
+                    except ValueError:
+                        pass
+            if override_size:
+                return override_size
+            if default_size:
+                return default_size
         except Exception as e:
             logger.warning(f"Screen resolution detection failed: {e}")
         return 0, 0
@@ -114,12 +122,12 @@ class DeviceOptimizer:
         logger.info(f"Current IP: {old_ip} ({old_net})")
 
         # 打开快速设置面板
-        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "expand-settings"])
+        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "expand-settings"], timeout=10)
         time.sleep(1)
         
         # 检查是否成功执行了 svc（需要 Root）
-        res_data = subprocess.run(self.adb_prefix + ["shell", "svc", "data", "disable"], capture_output=True, text=True)
-        res_wifi = subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "disable"], capture_output=True, text=True)
+        res_data = subprocess.run(self.adb_prefix + ["shell", "svc", "data", "disable"], capture_output=True, text=True, timeout=10)
+        res_wifi = subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "disable"], capture_output=True, text=True, timeout=10)
         
         if "Killed" in res_data.stderr or "Permission denied" in res_data.stderr:
             logger.error("Failed to disable data via 'svc' command. It requires Root on Android 10+. "
@@ -129,15 +137,20 @@ class DeviceOptimizer:
         time.sleep(jitter_delay)
         
         logger.info("Enabling Cellular Data and WiFi...")
-        subprocess.run(self.adb_prefix + ["shell", "svc", "data", "enable"])
-        subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "enable"])
+        subprocess.run(self.adb_prefix + ["shell", "svc", "data", "enable"], timeout=10)
+        subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "enable"], timeout=10)
         
-        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "collapse"])
+        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "collapse"], timeout=10)
         
-        logger.info("Network ON. Waiting 10s for new IP allocation...")
-        time.sleep(10)
+        logger.info("Network ON. Waiting for IP allocation...")
         
-        new_ip, new_net = self._get_ip()
+        # Retry loop for network recovery (up to 30 seconds)
+        for attempt in range(15):
+            time.sleep(2)
+            new_ip, new_net = self._get_ip()
+            if new_ip != "unknown":
+                break
+                
         if old_ip != "unknown" and old_ip == new_ip:
             logger.warning(f"⚠️ IP rotation may have failed. IP remains: {new_ip} ({new_net})")
         elif new_ip == "unknown":
@@ -151,12 +164,12 @@ class DeviceOptimizer:
         注意: stayon 通常只在连接 USB 时生效，电池模式下可能不生效。
         """
         logger.info("Setting screen timeout to maximum to prevent sleep... (Note: stayon works mostly while charging)")
-        subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "screen_off_timeout", "1800000"]) # 30 mins
-        subprocess.run(self.adb_prefix + ["shell", "svc", "power", "stayon", "true"])
+        subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "screen_off_timeout", "1800000"], timeout=10)  # 30 mins
+        subprocess.run(self.adb_prefix + ["shell", "svc", "power", "stayon", "true"], timeout=10)
         
     def clear_app_data(self, package_name="com.xingin.xhs"):
         """
         切换账号时，彻底清理沙盒数据，防止本地 UUID 缓存追踪。
         """
         logger.info(f"Clearing sandbox data for {package_name}...")
-        subprocess.run(self.adb_prefix + ["shell", "pm", "clear", package_name])
+        subprocess.run(self.adb_prefix + ["shell", "pm", "clear", package_name], timeout=15)

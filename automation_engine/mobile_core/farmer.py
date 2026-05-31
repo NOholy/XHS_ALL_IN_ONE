@@ -10,8 +10,10 @@ import time
 import numpy as np
 from datetime import datetime
 from .logger import get_logger
+from .ocr_client import OCRClient
 from .watchdog import PopupWatchdog
 from .exceptions import RiskControlTriggered
+from .loop_detector import LoopDetector
 
 logger = get_logger("farmer")
 
@@ -23,7 +25,7 @@ class AccountFarmer:
     所有概率参数均从 config.farm 读取，支持运行时调整。
     """
 
-    def __init__(self, driver, vision, ocr, navigator, reader, commenter, config):
+    def __init__(self, driver, vision, ocr, navigator, reader, commenter, config, keyboard=None, watchdog=None):
         self.driver = driver
         self.vision = vision
         self.ocr = ocr
@@ -31,9 +33,12 @@ class AccountFarmer:
         self.reader = reader
         self.commenter = commenter
         self.config = config
+        self.keyboard = keyboard
         
-        # 全局风控看门狗
-        self.watchdog = PopupWatchdog(self.vision, self.driver, self.ocr)
+        # 全局风控看门狗（支持外部注入共享实例）
+        self.watchdog = watchdog or PopupWatchdog(self.vision, self.driver, self.ocr)
+        # 指纹型死循环检测器（借鉴 ApkClaw）
+        self.loop_detector = LoopDetector()
         
         # 会话统计
         self.stats = {
@@ -67,31 +72,27 @@ class AccountFarmer:
                 json.dump({"history": []}, f)
 
     def _save_record(self, action_type: str):
-        """持久化记录行为"""
+        """持久化记录行为（带文件锁防止并发写入损坏）"""
         today_str = datetime.now().strftime("%Y-%m-%d")
         time_str = datetime.now().strftime("%H:%M:%S")
         try:
+            import fcntl
             with open(self.record_file, "r+", encoding="utf-8") as f:
-                data = json.load(f)
-                
-                # 寻找今天的记录
-                today_record = next((item for item in data.get("history", []) if item["date"] == today_str), None)
-                if not today_record:
-                    today_record = {"date": today_str, "actions": {"like": 0, "collect": 0, "comment": 0, "follow": 0}, "details": []}
-                    data.setdefault("history", []).append(today_record)
-                
-                # 更新
-                if action_type in today_record["actions"]:
-                    today_record["actions"][action_type] += 1
-                    
-                today_record.setdefault("details", []).append({
-                    "time": time_str,
-                    "action": action_type
-                })
-                
-                f.seek(0)
-                json.dump(data, f, indent=4, ensure_ascii=False)
-                f.truncate()
+                fcntl.flock(f, fcntl.LOCK_EX)
+                try:
+                    data = json.load(f)
+                    today_record = next((item for item in data.get("history", []) if item["date"] == today_str), None)
+                    if not today_record:
+                        today_record = {"date": today_str, "actions": {"like": 0, "collect": 0, "comment": 0, "follow": 0}, "details": []}
+                        data.setdefault("history", []).append(today_record)
+                    if action_type in today_record["actions"]:
+                        today_record["actions"][action_type] += 1
+                    today_record.setdefault("details", []).append({"time": time_str, "action": action_type})
+                    f.seek(0)
+                    json.dump(data, f, indent=4, ensure_ascii=False)
+                    f.truncate()
+                finally:
+                    fcntl.flock(f, fcntl.LOCK_UN)
         except Exception as e:
             logger.error(f"Failed to save farm record: {e}")
 
@@ -152,24 +153,21 @@ class AccountFarmer:
         self._log_session_summary(time.time() - self.session_start_time)
 
     def _browse_feed(self):
-        """信息流浏览 + 随机停顿，并校验是否真实滑动了"""
+        """信息流浏览 + 随机停顿，使用指纹型检测验证滑动效果"""
         img_before = self.driver.screenshot()
+        self.loop_detector.update_screen(img_before)
+
         self.driver.human_swipe("down")
         self.driver.human_sleep(1.0, 0.5)
-        img_after = self.driver.screenshot()
-        
-        # 截取中间一块较大的区域计算视觉差，验证是否滑动成功
-        if img_before is not None and img_after is not None:
-            h, w = img_before.shape[:2]
-            roi_b = img_before[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
-            roi_a = img_after[int(h*0.3):int(h*0.7), int(w*0.2):int(w*0.8)]
-            if roi_b.shape == roi_a.shape and roi_b.size > 0:
-                err = np.sum((roi_b.astype("float") - roi_a.astype("float")) ** 2)
-                err /= float(roi_b.shape[0] * roi_b.shape[1] * roi_b.shape[2])
-                if err < 1.0: # 极小变化，没划动
-                    logger.warning(f"Browse feed failed: Screen seems stuck (MSE={err:.2f})")
-                    return
-                    
+        self.loop_detector.record_action("swipe", "down")
+
+        # 指纹型死循环检测（替代单次 MSE 比对，对视频/动画免疫）
+        if self.loop_detector.is_stuck():
+            logger.warning(f"Browse feed stuck detected via fingerprint. {self.loop_detector.get_suggestion()}")
+            self.navigator.go_home()
+            self.loop_detector.clear()
+            return
+
         self.stats["scrolls"] += 1
         logger.info(f"Browse feed successful (scroll #{self.stats['scrolls']})")
 
@@ -199,10 +197,8 @@ class AccountFarmer:
             card_img = img[cy:cy+ch, cx:cx+cw]
             try:
                 ocr_results = self.reader.ocr.ocr_image(card_img)
-                for line in (ocr_results or []):
-                    _, (text, conf) = line
+                for _, text, conf in OCRClient.safe_parse_results(ocr_results):
                     if conf > 0.6 and len(text) >= 2:
-                        # 选最长的一段话或者第一段话作为锚点
                         anchor_text = text[:6] if len(text) > 6 else text
                         break
             except Exception as e:
@@ -241,7 +237,28 @@ class AccountFarmer:
         # 动态阅读时间
         desc_len = sum(len(line) for line in post_context.get("description", []))
         read_time_boost = 1.0 + (desc_len / 100.0) # 每100字多看一倍时间
-        self.driver.human_sleep(self.config.farm.read_duration_mu * read_time_boost, self.config.farm.read_duration_sigma)
+        
+        # 将总阅读时间切片，并在期间引入微观注意力模拟 (micro_swipe)
+        total_sleep_time = max(2.0, np.random.normal(
+            self.config.farm.read_duration_mu * read_time_boost, 
+            self.config.farm.read_duration_sigma
+        ))
+        
+        logger.info(f"Reading post for {total_sleep_time:.1f}s with attention simulation")
+        elapsed = 0.0
+        while elapsed < total_sleep_time:
+            # 每次片段 2-4 秒
+            chunk = random.uniform(2.0, 4.0)
+            if elapsed + chunk > total_sleep_time:
+                chunk = total_sleep_time - elapsed
+            
+            time.sleep(chunk)
+            elapsed += chunk
+            
+            # 以一定概率执行注意力模拟微滑动
+            if elapsed < total_sleep_time and random.random() < 0.6:
+                if hasattr(self.driver, "micro_swipe"):
+                    self.driver.micro_swipe()
 
         fatigue = self._get_fatigue_factor()
         logger.debug(f"Farming context: fatigue={fatigue:.2f}, persona={getattr(self.config.farm, 'persona', 'balanced')}")
@@ -502,9 +519,12 @@ class AccountFarmer:
 
             if self.config.device.typing_mode == "clipboard":
                 import subprocess
-                subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", f"'{keyword}'"])
+                subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", keyword], timeout=10)
             else:
                 self.keyboard.type_chinese(keyword)
+            # 提交搜索
+            import subprocess as _sp
+            _sp.run(self.driver.adb_prefix + ["shell", "input", "keyevent", "66"], timeout=5)
             # 等待搜索结果加载
             self.driver.human_sleep(3.0, 1.0)
             

@@ -34,6 +34,7 @@
 ┌──────────────▼──────────────────────────────────────────┐
 │                能力层 (mobile_core/)                     │
 │  Navigator · Searcher · Reader · Commenter · Farmer     │
+│  AgentLoop · ToolRegistry · Tools (navigate/interact)   │
 └──────────────┬──────────────────────────────────────────┘
                │
 ┌──────────────▼──────────────────────────────────────────┐
@@ -308,7 +309,32 @@ schedule:
 
 ---
 
-### 4.5 辅助命令
+### 4.5 Agent 智能体模式 (`agent`)
+
+**用途**：接入 LLM API (如 DeepSeek)，将原本的硬编码状态机转化为自动决策的开放域 Agent 模式。
+
+```bash
+# 启动智能体并输入任务指令
+python start_mobile_driver_v2.py --action agent --prompt "去搜索下旅游攻略并点赞第一篇帖子"
+```
+
+**Agent 配置** (在 `config.yaml` 或 `config.py` 中配置)：
+```yaml
+agent:
+  enabled: true
+  llm_endpoint: "https://api.deepseek.com/chat/completions"
+  llm_api_key: "sk-xxxx"
+  llm_model: "deepseek-v4-flash"
+  max_iterations: 30
+```
+**安全与防御机制**：
+- **防卡死防御**：内置指纹型死循环检测（`LoopDetector`），如果 Agent 连续多次执行无效操作（如点击死链导致页面无变化），系统会自动打断大模型并强制提示其更换路线或后退。
+- **弹窗防御**：底层依然接管 `Watchdog` 弹窗扫描，与状态机模式享受同级别的安全防护。
+- **上下文压缩**：执行超过 5 轮后，自动将旧工具的返回结果（如帖子内容）压缩为摘要，有效控制 Token 开销。
+
+---
+
+### 4.6 辅助命令
 
 ```bash
 # 扫描信息流（查看当前可见帖子坐标）
@@ -502,7 +528,7 @@ python start_mobile_driver_v2.py --action auto
 
 | 参数 | 说明 | 示例 |
 |------|------|------|
-| `--action` | 执行动作（必填） | `init / farm / intercept / auto / scan / extract / reply` |
+| `--action` | 执行动作（必填） | `init / farm / intercept / auto / scan / extract / reply / agent` |
 | `--device` | 覆盖设备序列号 | `--device 192.168.1.100:5555` |
 | `--agentless` | 强制无代理模式 | `--agentless` |
 | `--typing-mode` | 覆盖打字模式 | `--typing-mode opencv` |
@@ -513,6 +539,7 @@ python start_mobile_driver_v2.py --action auto
 | `--farm-duration` | 覆盖养号时长(分钟) | `--farm-duration 60` |
 | `--x / --y` | 坐标（extract/reply用） | `--x 540 --y 800` |
 | `--text` | 评论文本（reply用） | `--text "好的谢谢"` |
+| `--prompt` | Agent 任务指令 | `--prompt "搜索旅游攻略"` |
 
 ### 6.2 环境变量清单
 
@@ -530,6 +557,8 @@ python start_mobile_driver_v2.py --action auto
 | `AE_LLM_MODEL` | `intercept.llm_model` | LLM 模型名 |
 | `AE_RUN_MODE` | `schedule.run_mode` | 运行策略 |
 | `AE_FARM_DURATION` | `farm.session_duration_minutes` | 养号时长 |
+| `AE_AGENT_LLM_API_KEY`| `agent.llm_api_key` | Agent 模式的 API Key |
+| `AE_AGENT_LLM_MODEL` | `agent.llm_model` | Agent 模式的模型名称 |
 
 ### 6.3 风控配额默认值
 
@@ -634,6 +663,13 @@ automation_engine/
 │   ├── reader.py                 # 帖子阅读器
 │   ├── commenter.py              # 智能评论器
 │   ├── farmer.py                 # 养号器
+│   ├── agent_loop.py             # Agent 模式核心循环 (Phase 3)
+│   ├── tool_registry.py          # 工具抽象与注册中心 (Phase 3)
+│   ├── tools/                    # Agent 能力封装包 (Phase 3)
+│   │   ├── navigate_tool.py
+│   │   └── interact_tool.py
+│   ├── page_detector.py          # dumpsys 快速页面识别 (Phase 2)
+│   ├── loop_detector.py          # 屏幕指纹级防卡死模块 (Phase 1)
 │   ├── agentless_driver.py       # 无代理物理驱动
 │   ├── device_driver.py          # U2 驱动（调试用）
 │   ├── device_optimizer.py       # 设备优化器

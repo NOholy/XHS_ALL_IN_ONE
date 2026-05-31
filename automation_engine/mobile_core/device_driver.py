@@ -8,9 +8,10 @@ logger = get_logger("device_driver")
 
 try:
     import uiautomator2 as u2
+    _U2_AVAILABLE = True
 except ImportError:
-    logger.error("uiautomator2 is not installed. Run `pip install uiautomator2`")
-    sys.exit(1)
+    _U2_AVAILABLE = False
+    logger.warning("uiautomator2 not installed. DeviceDriver unavailable (use AgentlessMinitouchDriver instead).")
 
 class DeviceDriver:
     """
@@ -18,6 +19,8 @@ class DeviceDriver:
     Currently wraps uiautomator2, but designed to be replaceable by Scrcpy/Minitouch in Phase 3.
     """
     def __init__(self, serial=None):
+        if not _U2_AVAILABLE:
+            raise ImportError("uiautomator2 is not installed. Run `pip install uiautomator2` or use AgentlessMinitouchDriver.")
         self.serial = serial
         try:
             logger.info("Connecting to device...", extra={"device_serial": serial})

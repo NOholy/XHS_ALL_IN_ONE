@@ -104,7 +104,7 @@ def crop_and_save_via_ocr(driver, ocr_client, text_query, filename, serial=None,
     Screenshot -> OCR -> find text_query -> crop region -> validate -> save.
     Returns (success: bool, path: str).
     """
-    img = driver.screenshot()
+    img = driver.clean_screenshot()
     h_screen, w_screen = img.shape[:2]
     resolution_dir = f"{w_screen}x{h_screen}"
     serial = serial or _auto_detect_serial()
@@ -175,7 +175,7 @@ def verify_template_action(driver, ocr_client, template_name, serial, resolution
     serial = serial or _auto_detect_serial()
     templates_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", serial, resolution)
     vision = VisionEngine(templates_dir)
-    img = driver.screenshot()
+    img = driver.clean_screenshot()
     match = vision.find_template(img, template_name, threshold=0.7)
     if not match:
         logger.error(f"Verification failed: newly cropped template '{template_name}' could not be matched!")
@@ -185,7 +185,7 @@ def verify_template_action(driver, ocr_client, template_name, serial, resolution
     driver.physical_tap(match['x'], match['y'])
     driver.human_sleep(4.0, 1.0) # Wait longer for page to load
     
-    new_img = driver.screenshot()
+    new_img = driver.clean_screenshot()
     all_text = _get_all_screen_text(ocr_client, new_img)
     
     for kw in assert_keywords:
@@ -210,7 +210,7 @@ def verify_template_cross_check(driver, ocr_client, template_name, serial, resol
     serial = serial or _auto_detect_serial()
     templates_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", serial, resolution)
     vision = VisionEngine(templates_dir)
-    img = driver.screenshot()
+    img = driver.clean_screenshot()
     
     # Signal 1: Template matching
     match = vision.find_template(img, template_name, threshold=0.7)
@@ -250,7 +250,7 @@ def verify_template_cross_check(driver, ocr_client, template_name, serial, resol
 
 def crop_fixed_region(driver, filename, serial, box, validate=True):
     """Crop a fixed region of the screen and save it."""
-    img = driver.screenshot()
+    img = driver.clean_screenshot()
     h_screen, w_screen = img.shape[:2]
     resolution_dir = f"{w_screen}x{h_screen}"
     serial = serial or _auto_detect_serial()
@@ -295,21 +295,21 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
         watchdog = PopupWatchdog(driver, vision, ocr_client, config)
     
     # Force stop app to ensure we start at the home feed
-    subprocess.run(adb_cmd + ["shell", "am", "force-stop", "com.xingin.xhs"])
+    subprocess.run(adb_cmd + ["shell", "am", "force-stop", "com.xingin.xhs"], timeout=10)
     time.sleep(2)
     
-    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_HOME"])
+    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_HOME"], timeout=10)
     time.sleep(1)
     
     # Launch app
-    subprocess.run(adb_cmd + ["shell", "monkey", "-p", "com.xingin.xhs", "-c", "android.intent.category.LAUNCHER", "1"])
+    subprocess.run(adb_cmd + ["shell", "monkey", "-p", "com.xingin.xhs", "-c", "android.intent.category.LAUNCHER", "1"], timeout=10)
     driver.human_sleep(5.0) 
     
     # Wait until app is truly loaded (OCR sees '推荐' or '发现' or '首页')
     logger.info("Waiting for app to load to home feed...")
     app_loaded = False
     for _ in range(10):
-        img_check = driver.screenshot()
+        img_check = driver.clean_screenshot()
         try:
             res = ocr_client.ocr_image(img_check)
             text_str = " ".join([t for _, t, _ in _parse_ocr_results(res)])
@@ -323,7 +323,7 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
     if not app_loaded:
         logger.warning("Could not definitively detect home feed, proceeding anyway.")
 
-    img = driver.screenshot()
+    img = driver.clean_screenshot()
     h_screen, w_screen = img.shape[:2]
     resolution_dir = f"{w_screen}x{h_screen}"
     report = {"templates": {}, "success": True}
@@ -376,34 +376,34 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
         report["success"] = False
         return False
 
-    # --- Phase A: Navigation Tabs ---
-    # Since OCR often misses the small tab bar text, we use fixed geometric boxes.
-    # The tab bar is at the bottom. 5 tabs -> each is w_screen/5 wide.
-    # Tab bar height is roughly bottom 8%.
-    tab_y_start = int(h_screen * 0.92)
-    tab_w = w_screen // 5
-    
-    # Capture 'tab_profile' (5th tab, index 4)
-    profile_box = [w_screen - tab_w, tab_y_start, w_screen, h_screen]
-    attempt_crop_and_verify("tab_profile", "我", 0.88, ["编辑资料", "粉丝", "赞与收藏"], fixed_box=profile_box)
-    
-    # Capture 'tab_message' (4th tab, index 3)
-    message_box = [tab_w * 3, tab_y_start, tab_w * 4, h_screen]
-    attempt_crop_and_verify("tab_message", "消息", 0.88, ["发现群聊", "赞和收藏", "新增关注"], fixed_box=message_box)
-    
-    # Capture 'tab_home' (1st tab, index 0)
-    home_box = [0, tab_y_start, tab_w, h_screen]
-    attempt_crop_and_verify("tab_home", "首页", 0.88, ["搜索", "发现", "推荐"], fixed_box=home_box)
-    
+    # --- Phase A & B: Fixed-coordinate templates ---
+    # Read coordinates from TEMPLATE_REGISTRY (single source of truth)
+    # Lazy import to avoid circular dependency (assisted_crop imports auto_crop_templates)
+    from tools.assisted_crop import TEMPLATE_REGISTRY as _REGISTRY
+
+    def _registry_box(name):
+        """从 TEMPLATE_REGISTRY 获取固定坐标 box (像素值)"""
+        region = _REGISTRY[name][3]
+        if isinstance(region, tuple):
+            return [int(w_screen * region[0]), int(h_screen * region[1]),
+                    int(w_screen * region[2]), int(h_screen * region[3])]
+        return None
+
+    # Capture 'tab_profile' (5th tab)
+    attempt_crop_and_verify("tab_profile", "我", 0.88, ["编辑资料", "粉丝", "赞与收藏"], fixed_box=_registry_box("tab_profile"))
+
+    # Capture 'tab_message' (4th tab)
+    attempt_crop_and_verify("tab_message", "消息", 0.88, ["发现群聊", "赞和收藏", "新增关注"], fixed_box=_registry_box("tab_message"))
+
+    # Capture 'tab_home' (1st tab)
+    attempt_crop_and_verify("tab_home", "首页", 0.88, ["搜索", "发现", "推荐"], fixed_box=_registry_box("tab_home"))
+
     # --- Phase B: Search Input ---
-    # Capture 'search_input' (Top right search icon on Home Feed)
-    # Usually around x: 80% to 100%, y: 5% to 15%
-    search_box = [int(w_screen * 0.8), int(h_screen * 0.05), w_screen, int(h_screen * 0.15)]
-    attempt_crop_and_verify("search_input", "搜索", 0.0, ["历史记录", "搜索发现", "猜你想搜", "搜索"], fixed_box=search_box)
+    attempt_crop_and_verify("search_input", "搜索", 0.0, ["历史记录", "搜索发现", "猜你想搜", "搜索"], fixed_box=_registry_box("search_input"))
     navigator.go_back()  # 第一次：收起键盘或退出搜索页
     driver.human_sleep(1.0)
     # 校验是否已经回到首页，防止"退过头"
-    img_check = driver.screenshot()
+    img_check = driver.clean_screenshot()
     screen_text = _get_all_screen_text(ocr_client, img_check)
     if not ("推荐" in screen_text or "发现" in screen_text or "首页" in screen_text):
         navigator.go_back()  # 第二次：确实还在搜索页，再退一次
@@ -434,7 +434,7 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
         driver.human_sleep(2.0)
         
         # Check if the white comment sheet is open (high contrast, easy OCR)
-        img = driver.screenshot()
+        img = driver.clean_screenshot()
         try:
             res = ocr_client.ocr_image(img)
             text_str = " ".join([t for _, t, _ in _parse_ocr_results(res)])
@@ -453,10 +453,10 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
                 logger.info("Checking keyboard focus before typing...")
                 driver.human_sleep(2.0)
                 # Watchdog: OCR 校验键盘是否弹出
-                img_kb = driver.screenshot()
+                img_kb = driver.clean_screenshot()
                 if ocr_client.find_text(img_kb, "发送", conf_threshold=0.6) or ocr_client.find_text(img_kb, "发布", conf_threshold=0.6):
                     logger.info("Keyboard opened successfully. Typing text to reveal send button...")
-                    subprocess.run(adb_cmd + ["shell", "input", "text", "hello"])
+                    subprocess.run(adb_cmd + ["shell", "input", "text", "hello"], timeout=10)
                     driver.human_sleep(2.0)
     
                     # Phase D: Send Button (非破坏性交叉校验，绝不真的点击发送)
@@ -468,9 +468,9 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
                     
                     # 清除已输入的文字，绝不留下痕迹
                     logger.info("Clearing typed text to avoid accidental send...")
-                    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_MOVE_END"])
+                    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_MOVE_END"], timeout=10)
                     for _ in range(10):
-                        subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_DEL"])
+                        subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_DEL"], timeout=10)
                 else:
                     logger.warning("Keyboard did not open. Aborting send_button harvest for this post.")
                 
@@ -480,12 +480,12 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
                 driver.human_sleep(1.0)
                 
                 # Scroll down the comment sheet slightly to find comments
-                img_before_swipe = driver.screenshot()
+                img_before_swipe = driver.clean_screenshot()
                 driver.physical_swipe(w_screen//2, int(h_screen*0.8), w_screen//2, int(h_screen*0.4))
                 driver.human_sleep(2.0)
                 
                 # Watchdog: 防卡死校验
-                img_after_swipe = driver.screenshot()
+                img_after_swipe = driver.clean_screenshot()
                 if img_before_swipe is not None and img_after_swipe is not None:
                     roi_b = img_before_swipe[int(h_screen*0.3):int(h_screen*0.7), int(w_screen*0.2):int(w_screen*0.8)]
                     roi_a = img_after_swipe[int(h_screen*0.3):int(h_screen*0.7), int(w_screen*0.2):int(w_screen*0.8)]

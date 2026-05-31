@@ -86,18 +86,25 @@ def _build_components(config):
         circuit_breaker_cooldown=config.ocr.circuit_breaker_cooldown,
     )
     keyboard = KeyboardVisionTyping(driver, vision, ocr)
-    watchdog = PopupWatchdog(vision, driver, ocr_client=ocr)
-    navigator = XHSNavigator(driver, vision, ocr, config)
+
+    # Phase 2: 构建轻量级页面检测器（通过 dumpsys，零风控风险）
+    from mobile_core.page_detector import LightPageDetector
+    page_detector = LightPageDetector(driver.adb_prefix)
+
+    watchdog = PopupWatchdog(vision, driver, ocr_client=ocr, page_detector=page_detector)
+    navigator = XHSNavigator(driver, vision, ocr, config, page_detector=page_detector)
     searcher = XHSSearcher(driver, vision, ocr, keyboard, navigator, config)
     reader = PostReader(driver, vision, ocr, config)
     commenter = SmartCommenter(driver, vision, ocr, keyboard, config)
-    farmer = AccountFarmer(driver, vision, ocr, navigator, reader, commenter, config)
+    farmer = AccountFarmer(driver, vision, ocr, navigator, reader, commenter, config,
+                           keyboard=keyboard, watchdog=watchdog)
 
     return {
         "driver": driver, "vision": vision, "ocr": ocr,
         "keyboard": keyboard, "watchdog": watchdog,
         "navigator": navigator, "searcher": searcher,
         "reader": reader, "commenter": commenter, "farmer": farmer,
+        "page_detector": page_detector,
     }
 
 
@@ -219,6 +226,39 @@ def action_auto(config):
         logger.error(f"Unknown run_mode: {mode}")
 
 
+def action_agent(config, prompt):
+    """LLM Agent 模式驱动"""
+    if not prompt:
+        logger.error("Agent mode requires --prompt to be specified.")
+        sys.exit(1)
+
+    components = _build_components(config)
+    from mobile_core.tool_registry import ToolRegistry
+    from mobile_core.tools import (
+        GoHomeTool, DetectPageTool, TapTool, SwipeTool,
+        SearchKeywordTool, ReadPostTool, FinishTool
+    )
+    from mobile_core.agent_loop import AgentLoop
+
+    registry = ToolRegistry()
+    registry.register(GoHomeTool(components["navigator"]))
+    registry.register(DetectPageTool(components["navigator"]))
+    registry.register(TapTool(components["driver"]))
+    registry.register(SwipeTool(components["driver"]))
+    registry.register(SearchKeywordTool(components["searcher"]))
+    registry.register(ReadPostTool(components["reader"]))
+    registry.register(FinishTool())
+
+    agent = AgentLoop(registry, config)
+    logger.info(f"Starting Agent with prompt: {prompt}")
+    result = agent.run(prompt)
+    
+    print("\n--- AGENT RESULT ---")
+    print(result)
+    print("--------------------\n")
+
+
+
 def action_scan(config):
     """信息流扫描（保留原始功能）"""
     components = _build_components(config)
@@ -270,7 +310,7 @@ def parse_args():
     )
     parser.add_argument(
         "--action", required=True,
-        choices=["init", "farm", "intercept", "auto", "scan", "extract", "reply"],
+        choices=["init", "farm", "intercept", "auto", "scan", "extract", "reply", "agent"],
         help=(
             "init       - 真机一键初始化（关闭动画/采集模板/检测登录）\n"
             "farm       - 自动养号（浏览/点赞/收藏/搜索）\n"
@@ -278,7 +318,8 @@ def parse_args():
             "auto       - 全自动（根据 schedule.run_mode 配置执行）\n"
             "scan       - 信息流扫描\n"
             "extract    - 提取指定帖子内容\n"
-            "reply      - 回复指定坐标"
+            "reply      - 回复指定坐标\n"
+            "agent      - 启动 LLM Agent 模式"
         )
     )
     # CLI 覆盖参数（均为可选，不传则使用 config.yaml）
@@ -305,6 +346,9 @@ def parse_args():
     parser.add_argument("--x", type=int, help="X坐标")
     parser.add_argument("--y", type=int, help="Y坐标")
     parser.add_argument("--text", type=str, help="评论文本")
+    
+    # Agent 参数
+    parser.add_argument("--prompt", type=str, help="Agent 任务提示词")
 
     return parser.parse_args()
 
@@ -358,6 +402,8 @@ def main():
             sys.exit(1)
         action_reply(config, args.x, args.y, args.text,
                      args.live or config.intercept.live_mode)
+    elif args.action == "agent":
+        action_agent(config, args.prompt)
 
 
 if __name__ == "__main__":

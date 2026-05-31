@@ -3,6 +3,7 @@
 从 start_mobile_driver_v2.py 的 state_post_extract 中提取重构为独立模块。
 """
 from .logger import get_logger
+from .ocr_client import OCRClient
 
 logger = get_logger("reader")
 
@@ -57,8 +58,7 @@ class PostReader:
         try:
             ocr_results = self.ocr.ocr_image(img)
             lines = []
-            for line in ocr_results:
-                _, (text, conf) = line
+            for _, text, conf in OCRClient.safe_parse_results(ocr_results):
                 if conf > 0.6 and len(text) > 2:
                     lines.append(text)
             return lines
@@ -72,8 +72,7 @@ class PostReader:
         try:
             ocr_results = self.ocr.ocr_image(img)
             # 作者名通常在帖子顶部、字数较短
-            for line in ocr_results:
-                box, (text, conf) = line
+            for box, text, conf in OCRClient.safe_parse_results(ocr_results):
                 y_pos = box[0][1]  # 文字的 Y 坐标
                 if y_pos < self.config.device.screen_height * 0.15 and \
                    2 < len(text) < 15 and conf > 0.7:
@@ -92,16 +91,18 @@ class PostReader:
 
         try:
             ocr_results = self.ocr.ocr_image(img)
-            reply_btn = self.vision.find_template(img, "reply_button", threshold=0.8)
+            reply_btns = getattr(self.vision, "find_all_templates", lambda i, n, t: [self.vision.find_template(i, n, t)] if self.vision.find_template(i, n, t) else [])(img, "reply_button", threshold=0.8)
 
-            for i, line in enumerate(ocr_results):
-                box, (text, conf) = line
+            for i, (box, text, conf) in enumerate(OCRClient.safe_parse_results(ocr_results)):
                 if conf > 0.6 and len(text) > 2 and "回复" not in text:
+                    y_center = sum(p[1] for p in box) / len(box)
+                    # Find closest reply button by Y coordinate
+                    closest_btn = min(reply_btns, key=lambda b: abs(b['y'] - y_center)) if reply_btns else None
                     comments.append({
                         "id": i,
                         "content": text,
-                        "reply_x": reply_btn["x"] if reply_btn else 0,
-                        "reply_y": reply_btn["y"] if reply_btn else 0,
+                        "reply_x": closest_btn["x"] if closest_btn else 0,
+                        "reply_y": closest_btn["y"] if closest_btn else 0,
                         "conf": conf,
                     })
         except Exception as e:

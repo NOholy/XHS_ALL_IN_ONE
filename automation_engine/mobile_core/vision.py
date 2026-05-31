@@ -57,6 +57,53 @@ class VisionEngine:
             return {"x": center_x, "y": center_y, "conf": max_val}
         return None
 
+    def find_all_templates(self, screen_img, template_name, threshold=0.75):
+        """Find all occurrences of a template in the screen image."""
+        if template_name not in self.templates:
+            return []
+
+        template = self.templates[template_name]
+        gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+        
+        res = cv2.matchTemplate(gray_screen, template, cv2.TM_CCOEFF_NORMED)
+        loc = np.where(res >= threshold)
+        
+        matches = []
+        h, w = template.shape
+        for pt in zip(*loc[::-1]):  # Switch columns and rows
+            center_x = pt[0] + w // 2
+            center_y = pt[1] + h // 2
+            matches.append({"x": int(center_x), "y": int(center_y), "conf": float(res[pt[1]][pt[0]])})
+            
+        # Basic Non-Maximum Suppression (NMS) to avoid overlapping bounding boxes
+        unique_matches = []
+        for m in sorted(matches, key=lambda x: x['conf'], reverse=True):
+            if not any(abs(m['x'] - u['x']) < w//2 and abs(m['y'] - u['y']) < h//2 for u in unique_matches):
+                unique_matches.append(m)
+                
+        return unique_matches
+
+    def compute_screen_mse(self, img_a, img_b, roi=None):
+        """
+        Compute Mean Squared Error (MSE) between two screen images.
+        roi is an optional tuple (x, y, w, h).
+        Returns float MSE. Less than 1.0 usually means identical/no change.
+        """
+        if img_a is None or img_b is None:
+            return float('inf')
+            
+        if roi:
+            x, y, w, h = roi
+            img_a = img_a[y:y+h, x:x+w]
+            img_b = img_b[y:y+h, x:x+w]
+            
+        if img_a.shape != img_b.shape or img_a.size == 0:
+            return float('inf')
+            
+        err = np.sum((img_a.astype("float") - img_b.astype("float")) ** 2)
+        err /= float(img_a.shape[0] * img_a.shape[1] * img_a.shape[2])
+        return err
+
     def detect_cards_waterfall(self, screen_img):
         """Dynamically detect feed cards using edge detection and contour logic."""
         # This replaces the hardcoded grid with dynamic contour detection

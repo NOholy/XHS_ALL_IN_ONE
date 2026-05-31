@@ -53,5 +53,9 @@ class KeyboardVisionTyping:
             logger.info(f"Found candidate '{target_char}' at ({target['x']}, {target['y']})")
             self.driver.physical_tap(target['x'], target['y'])
         else:
-            logger.error(f"Candidate '{target_char}' not found via OCR. Typing might fail.")
-            # In a robust system, we would click the "expand candidates" button and search again
+            logger.error(f"Candidate '{target_char}' not found via OCR. Triggering recovery (fallback).")
+            # Recovery strategy: if character is missing, press backspace multiple times to clear bad pinyin
+            w, h = self.driver.get_screen_size() if hasattr(self.driver, 'get_screen_size') else (1080, 2400)
+            self.driver.physical_tap(int(w * 0.9), int(h * 0.9))
+            time.sleep(0.5)
+            self.driver.physical_tap(int(w * 0.9), int(h * 0.9))
