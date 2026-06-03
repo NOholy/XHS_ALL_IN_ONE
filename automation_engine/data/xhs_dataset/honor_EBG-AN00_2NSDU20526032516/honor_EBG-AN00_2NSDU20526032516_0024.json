@@ -1,0 +1,157 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "位置",
+      "score": null,
+      "points": [
+        [
+          685.0,
+          178.0
+        ],
+        [
+          776.0,
+          178.0
+        ],
+        [
+          776.0,
+          227.0
+        ],
+        [
+          685.0,
+          227.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          906.0,
+          958.0
+        ],
+        [
+          953.0,
+          958.0
+        ],
+        [
+          953.0,
+          1002.0
+        ],
+        [
+          906.0,
+          1002.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          410.0,
+          1197.0
+        ],
+        [
+          458.0,
+          1197.0
+        ],
+        [
+          458.0,
+          1240.0
+        ],
+        [
+          410.0,
+          1240.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          427.0,
+          1923.0
+        ],
+        [
+          475.0,
+          1923.0
+        ],
+        [
+          475.0,
+          1969.0
+        ],
+        [
+          427.0,
+          1969.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已点赞",
+      "score": null,
+      "points": [
+        [
+          924.0,
+          1921.0
+        ],
+        [
+          971.0,
+          1921.0
+        ],
+        [
+          971.0,
+          1964.0
+        ],
+        [
+          924.0,
+          1964.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0024.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

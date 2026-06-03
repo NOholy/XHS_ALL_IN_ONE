@@ -1,0 +1,99 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "首页",
+      "score": null,
+      "points": [
+        [
+          84.98831228400616,
+          2241.944085181331
+        ],
+        [
+          176.22388173977205,
+          2241.944085181331
+        ],
+        [
+          176.22388173977205,
+          2293.217149843915
+        ],
+        [
+          84.98831228400616,
+          2293.217149843915
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": null,
+      "points": [
+        [
+          729.5874681610059,
+          2230.111839489966
+        ],
+        [
+          834.7067362964848,
+          2230.111839489966
+        ],
+        [
+          834.7067362964848,
+          2291.245177657897
+        ],
+        [
+          729.5874681610059,
+          2291.245177657897
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": null,
+      "points": [
+        [
+          966.6016363556685,
+          2242.9301400368827
+        ],
+        [
+          1012.2194150987256,
+          2242.9301400368827
+        ],
+        [
+          1012.2194150987256,
+          2292.2310949883636
+        ],
+        [
+          966.6016363556685,
+          2292.2310949883636
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0020_aug_4.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

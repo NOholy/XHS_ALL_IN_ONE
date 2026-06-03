@@ -1,0 +1,186 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "首页",
+      "score": null,
+      "points": [
+        [
+          57.99999922513962,
+          2237.9999363422394
+        ],
+        [
+          154.00000154972076,
+          2237.9999363422394
+        ],
+        [
+          154.00000154972076,
+          2300.000002384186
+        ],
+        [
+          57.99999922513962,
+          2300.000002384186
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": null,
+      "points": [
+        [
+          709.0000247955322,
+          2233.999936580658
+        ],
+        [
+          816.0000157356262,
+          2233.999936580658
+        ],
+        [
+          816.0000157356262,
+          2300.000002384186
+        ],
+        [
+          709.0000247955322,
+          2300.000002384186
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": null,
+      "points": [
+        [
+          949.0000104904175,
+          2248.0000054836273
+        ],
+        [
+          995.0000023841858,
+          2248.0000054836273
+        ],
+        [
+          995.0000023841858,
+          2297.9999327659607
+        ],
+        [
+          949.0000104904175,
+          2297.9999327659607
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          109.9999988079071,
+          1417.999985218048
+        ],
+        [
+          266.9999921321869,
+          1417.999985218048
+        ],
+        [
+          266.9999921321869,
+          1488.9999461174011
+        ],
+        [
+          109.9999988079071,
+          1488.9999461174011
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          416.99999928474426,
+          1416.9999504089355
+        ],
+        [
+          572.0000195503235,
+          1416.9999504089355
+        ],
+        [
+          572.0000195503235,
+          1488.0000507831573
+        ],
+        [
+          416.99999928474426,
+          1488.0000507831573
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          722.999997138977,
+          1417.999985218048
+        ],
+        [
+          877.9999852180481,
+          1417.999985218048
+        ],
+        [
+          877.9999852180481,
+          1488.9999461174011
+        ],
+        [
+          722.999997138977,
+          1488.9999461174011
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0019_aug_5.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

@@ -1,0 +1,156 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "输入评论",
+      "score": null,
+      "points": [
+        [
+          46.0,
+          1015.0
+        ],
+        [
+          1034.0,
+          1015.0
+        ],
+        [
+          1034.0,
+          1214.0
+        ],
+        [
+          46.0,
+          1214.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "发送",
+      "score": null,
+      "points": [
+        [
+          871.0,
+          1253.0
+        ],
+        [
+          1043.0,
+          1253.0
+        ],
+        [
+          1043.0,
+          1348.0
+        ],
+        [
+          871.0,
+          1348.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          727.0,
+          179.0
+        ],
+        [
+          918.0,
+          179.0
+        ],
+        [
+          918.0,
+          265.0
+        ],
+        [
+          727.0,
+          265.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          828.0,
+          738.0
+        ],
+        [
+          865.0,
+          738.0
+        ],
+        [
+          865.0,
+          773.0
+        ],
+        [
+          828.0,
+          773.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          400.0,
+          736.0
+        ],
+        [
+          472.0,
+          736.0
+        ],
+        [
+          472.0,
+          775.0
+        ],
+        [
+          400.0,
+          775.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0010.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080
+}

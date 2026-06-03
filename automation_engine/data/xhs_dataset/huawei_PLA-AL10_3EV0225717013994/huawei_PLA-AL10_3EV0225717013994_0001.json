@@ -1,0 +1,127 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "首页",
+      "score": null,
+      "points": [
+        [
+          73.0,
+          2719.0
+        ],
+        [
+          190.0,
+          2719.0
+        ],
+        [
+          190.0,
+          2786.0
+        ],
+        [
+          73.0,
+          2786.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": null,
+      "points": [
+        [
+          868.0,
+          2702.0
+        ],
+        [
+          1031.0,
+          2702.0
+        ],
+        [
+          1031.0,
+          2782.0
+        ],
+        [
+          868.0,
+          2782.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": null,
+      "points": [
+        [
+          1158.0,
+          2725.0
+        ],
+        [
+          1209.0,
+          2725.0
+        ],
+        [
+          1209.0,
+          2781.0
+        ],
+        [
+          1158.0,
+          2781.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "位置",
+      "score": null,
+      "points": [
+        [
+          829.0,
+          187.0
+        ],
+        [
+          934.0,
+          187.0
+        ],
+        [
+          934.0,
+          241.0
+        ],
+        [
+          829.0,
+          241.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "huawei_PLA-AL10_3EV0225717013994_0001.png",
+  "imageData": null,
+  "imageHeight": 2832,
+  "imageWidth": 1316
+}

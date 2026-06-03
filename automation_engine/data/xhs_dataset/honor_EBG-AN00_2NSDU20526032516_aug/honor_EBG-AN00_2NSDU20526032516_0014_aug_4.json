@@ -1,0 +1,127 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "发送",
+      "score": null,
+      "points": [
+        [
+          880.6397800979693,
+          1232.9225916676871
+        ],
+        [
+          1053.5276958138559,
+          1232.9225916676871
+        ],
+        [
+          1053.5276958138559,
+          1325.544976041851
+        ],
+        [
+          880.6397800979693,
+          1325.544976041851
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": null,
+      "points": [
+        [
+          39.59124681174558,
+          1002.829342792614
+        ],
+        [
+          1045.3917754131426,
+          1002.829342792614
+        ],
+        [
+          1045.3917754131426,
+          1193.9237359261494
+        ],
+        [
+          39.59124681174558,
+          1193.9237359261494
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          733.1766483675846,
+          184.828326615857
+        ],
+        [
+          927.4212569355258,
+          184.828326615857
+        ],
+        [
+          927.4212569355258,
+          269.65083785370166
+        ],
+        [
+          733.1766483675846,
+          269.65083785370166
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          853.1811469453797,
+          822.4596689840057
+        ],
+        [
+          927.4212569355258,
+          822.4596689840057
+        ],
+        [
+          927.4212569355258,
+          859.5085819384667
+        ],
+        [
+          853.1811469453797,
+          859.5085819384667
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0014_aug_4.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080
+}

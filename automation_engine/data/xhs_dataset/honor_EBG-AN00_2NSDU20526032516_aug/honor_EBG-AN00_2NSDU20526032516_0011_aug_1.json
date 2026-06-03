@@ -1,0 +1,215 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          465.85204191031255,
+          2262.659316348575
+        ],
+        [
+          545.7986053587158,
+          2262.659316348575
+        ],
+        [
+          545.7986053587158,
+          2333.631122039331
+        ],
+        [
+          465.85204191031255,
+          2333.631122039331
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          827.6614284072697,
+          1376.5265816671201
+        ],
+        [
+          867.6347101314714,
+          1376.5265816671201
+        ],
+        [
+          867.6347101314714,
+          1412.0124138069696
+        ],
+        [
+          827.6614284072697,
+          1412.0124138069696
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          827.6614284072697,
+          1683.7327706075548
+        ],
+        [
+          869.6846270901096,
+          1683.7327706075548
+        ],
+        [
+          869.6846270901096,
+          1720.232520028529
+        ],
+        [
+          827.6614284072697,
+          1720.232520028529
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          829.711345365908,
+          2078.1328760925117
+        ],
+        [
+          871.7345440487478,
+          2078.1328760925117
+        ],
+        [
+          871.7345440487478,
+          2116.660318664678
+        ],
+        [
+          829.711345365908,
+          2116.660318664678
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          476.10159371375573,
+          1373.4848298237462
+        ],
+        [
+          549.8984392759924,
+          1373.4848298237462
+        ],
+        [
+          549.8984392759924,
+          1412.0124138069696
+        ],
+        [
+          476.10159371375573,
+          1412.0124138069696
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          566.2977089656023,
+          1682.71885332643
+        ],
+        [
+          639.0695300690238,
+          1682.71885332643
+        ],
+        [
+          639.0695300690238,
+          1719.2186027474042
+        ],
+        [
+          566.2977089656023,
+          1719.2186027474042
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          476.10159371375573,
+          2076.1050415302625
+        ],
+        [
+          549.8984392759924,
+          2076.1050415302625
+        ],
+        [
+          549.8984392759924,
+          2115.6465427946105
+        ],
+        [
+          476.10159371375573,
+          2115.6465427946105
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0011_aug_1.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

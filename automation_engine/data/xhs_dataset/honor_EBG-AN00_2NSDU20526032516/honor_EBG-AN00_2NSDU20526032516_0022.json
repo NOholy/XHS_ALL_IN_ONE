@@ -1,0 +1,40 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          37.0,
+          1085.0
+        ],
+        [
+          467.0,
+          1085.0
+        ],
+        [
+          467.0,
+          1182.0
+        ],
+        [
+          37.0,
+          1182.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0022.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080
+}

@@ -1,0 +1,360 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "已点赞",
+      "score": null,
+      "points": [
+        [
+          458.0,
+          2224.0
+        ],
+        [
+          533.0,
+          2224.0
+        ],
+        [
+          533.0,
+          2292.0
+        ],
+        [
+          458.0,
+          2292.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已收藏",
+      "score": null,
+      "points": [
+        [
+          656.0,
+          2220.0
+        ],
+        [
+          729.0,
+          2220.0
+        ],
+        [
+          729.0,
+          2292.0
+        ],
+        [
+          656.0,
+          2292.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "查看评论列表",
+      "score": null,
+      "points": [
+        [
+          875.0,
+          2205.420185810811
+        ],
+        [
+          949.1427364864867,
+          2205.420185810811
+        ],
+        [
+          949.1427364864867,
+          2297.0
+        ],
+        [
+          875.0,
+          2297.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已关注",
+      "score": null,
+      "points": [
+        [
+          728.0,
+          171.0
+        ],
+        [
+          918.0,
+          171.0
+        ],
+        [
+          918.0,
+          271.0
+        ],
+        [
+          728.0,
+          271.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          846.0,
+          838.0
+        ],
+        [
+          887.0,
+          838.0
+        ],
+        [
+          887.0,
+          876.0
+        ],
+        [
+          846.0,
+          876.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          847.0,
+          1082.0
+        ],
+        [
+          886.0,
+          1082.0
+        ],
+        [
+          886.0,
+          1122.0
+        ],
+        [
+          847.0,
+          1122.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          849.0,
+          1976.0
+        ],
+        [
+          889.0,
+          1976.0
+        ],
+        [
+          889.0,
+          2015.0
+        ],
+        [
+          849.0,
+          2015.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          849.0,
+          316.0
+        ],
+        [
+          889.0,
+          316.0
+        ],
+        [
+          889.0,
+          354.0
+        ],
+        [
+          849.0,
+          354.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          590.0,
+          314.0
+        ],
+        [
+          661.0,
+          314.0
+        ],
+        [
+          661.0,
+          354.0
+        ],
+        [
+          590.0,
+          354.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          504.0,
+          838.0
+        ],
+        [
+          573.0,
+          838.0
+        ],
+        [
+          573.0,
+          874.0
+        ],
+        [
+          504.0,
+          874.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          542.0,
+          1977.0
+        ],
+        [
+          613.0,
+          1977.0
+        ],
+        [
+          613.0,
+          2013.0
+        ],
+        [
+          542.0,
+          2013.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "回复",
+      "score": null,
+      "points": [
+        [
+          418.0,
+          1179.0
+        ],
+        [
+          487.0,
+          1179.0
+        ],
+        [
+          487.0,
+          1217.0
+        ],
+        [
+          418.0,
+          1217.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0027.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

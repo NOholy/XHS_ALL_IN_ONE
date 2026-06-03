@@ -1,0 +1,331 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          303.0,
+          181.0
+        ],
+        [
+          391.0,
+          181.0
+        ],
+        [
+          391.0,
+          224.0
+        ],
+        [
+          303.0,
+          224.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "发现",
+      "score": null,
+      "points": [
+        [
+          494.0,
+          179.0
+        ],
+        [
+          587.0,
+          179.0
+        ],
+        [
+          587.0,
+          236.0
+        ],
+        [
+          494.0,
+          236.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "位置",
+      "score": null,
+      "points": [
+        [
+          687.0,
+          181.0
+        ],
+        [
+          775.0,
+          181.0
+        ],
+        [
+          775.0,
+          225.0
+        ],
+        [
+          687.0,
+          225.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          945.0,
+          1137.0
+        ],
+        [
+          988.0,
+          1137.0
+        ],
+        [
+          988.0,
+          1178.0
+        ],
+        [
+          945.0,
+          1178.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          908.0,
+          2100.0
+        ],
+        [
+          1033.0,
+          2100.0
+        ],
+        [
+          1033.0,
+          2141.0
+        ],
+        [
+          908.0,
+          2141.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "首页",
+      "score": null,
+      "points": [
+        [
+          60.0,
+          2254.0
+        ],
+        [
+          152.0,
+          2254.0
+        ],
+        [
+          152.0,
+          2299.0
+        ],
+        [
+          60.0,
+          2299.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "市集",
+      "score": null,
+      "points": [
+        [
+          279.0,
+          2254.0
+        ],
+        [
+          366.0,
+          2254.0
+        ],
+        [
+          366.0,
+          2297.0
+        ],
+        [
+          279.0,
+          2297.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": null,
+      "points": [
+        [
+          712.0,
+          2252.0
+        ],
+        [
+          795.0,
+          2252.0
+        ],
+        [
+          795.0,
+          2298.0
+        ],
+        [
+          712.0,
+          2298.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": null,
+      "points": [
+        [
+          950.0,
+          2252.0
+        ],
+        [
+          995.0,
+          2252.0
+        ],
+        [
+          995.0,
+          2298.0
+        ],
+        [
+          950.0,
+          2298.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          415.0,
+          1136.0
+        ],
+        [
+          456.0,
+          1136.0
+        ],
+        [
+          456.0,
+          1177.0
+        ],
+        [
+          415.0,
+          1177.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          377.0,
+          2095.0
+        ],
+        [
+          418.0,
+          2095.0
+        ],
+        [
+          418.0,
+          2136.0
+        ],
+        [
+          377.0,
+          2136.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_0001.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}
