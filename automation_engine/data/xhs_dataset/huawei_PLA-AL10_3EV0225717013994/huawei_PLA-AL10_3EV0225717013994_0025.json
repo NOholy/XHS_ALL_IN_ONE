@@ -1,0 +1,99 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "已关注",
+      "score": null,
+      "points": [
+        [
+          908.0,
+          184.0
+        ],
+        [
+          1126.0,
+          184.0
+        ],
+        [
+          1126.0,
+          285.0
+        ],
+        [
+          908.0,
+          285.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": null,
+      "points": [
+        [
+          53.0,
+          2670.0
+        ],
+        [
+          555.0,
+          2670.0
+        ],
+        [
+          555.0,
+          2796.0
+        ],
+        [
+          53.0,
+          2796.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "查看评论列表",
+      "score": null,
+      "points": [
+        [
+          1075.0,
+          2689.0
+        ],
+        [
+          1162.0,
+          2689.0
+        ],
+        [
+          1162.0,
+          2777.0
+        ],
+        [
+          1075.0,
+          2777.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "huawei_PLA-AL10_3EV0225717013994_0025.png",
+  "imageData": null,
+  "imageHeight": 2832,
+  "imageWidth": 1316,
+  "description": ""
+}

@@ -292,6 +292,35 @@
       "flags": {},
       "attributes": {},
       "kie_linking": []
+    },
+    {
+      "label": "查看评论列表",
+      "score": null,
+      "points": [
+        [
+          897.0,
+          2216.0
+        ],
+        [
+          972.0,
+          2216.0
+        ],
+        [
+          972.0,
+          2292.0
+        ],
+        [
+          897.0,
+          2292.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
     }
   ],
   "imagePath": "honor_EBG-AN00_2NSDU20526032516_0015.png",

@@ -1,0 +1,157 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "首页",
+      "score": null,
+      "points": [
+        [
+          78.0,
+          2725.0
+        ],
+        [
+          184.0,
+          2725.0
+        ],
+        [
+          184.0,
+          2782.0
+        ],
+        [
+          78.0,
+          2782.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          19.0,
+          1836.0
+        ],
+        [
+          649.0,
+          1836.0
+        ],
+        [
+          649.0,
+          2674.0
+        ],
+        [
+          19.0,
+          2674.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          666.0,
+          1837.0
+        ],
+        [
+          1298.0,
+          1837.0
+        ],
+        [
+          1298.0,
+          2675.0
+        ],
+        [
+          666.0,
+          2675.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": null,
+      "points": [
+        [
+          1157.0,
+          2724.0
+        ],
+        [
+          1211.0,
+          2724.0
+        ],
+        [
+          1211.0,
+          2782.0
+        ],
+        [
+          1157.0,
+          2782.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": null,
+      "points": [
+        [
+          869.0,
+          2692.0
+        ],
+        [
+          1033.0,
+          2692.0
+        ],
+        [
+          1033.0,
+          2782.0
+        ],
+        [
+          869.0,
+          2782.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "huawei_PLA-AL10_3EV0225717013994_0019.png",
+  "imageData": null,
+  "imageHeight": 2832,
+  "imageWidth": 1316,
+  "description": ""
+}

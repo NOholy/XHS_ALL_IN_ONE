@@ -89,6 +89,151 @@
       "flags": {},
       "attributes": {},
       "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          413.0,
+          1211.0
+        ],
+        [
+          454.0,
+          1211.0
+        ],
+        [
+          454.0,
+          1250.0
+        ],
+        [
+          413.0,
+          1250.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          945.0,
+          1512.0
+        ],
+        [
+          986.0,
+          1512.0
+        ],
+        [
+          986.0,
+          1552.0
+        ],
+        [
+          945.0,
+          1552.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          548.0,
+          646.0
+        ],
+        [
+          1063.0,
+          646.0
+        ],
+        [
+          1063.0,
+          1331.0
+        ],
+        [
+          548.0,
+          1331.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          15.0,
+          1309.0
+        ],
+        [
+          531.0,
+          1309.0
+        ],
+        [
+          531.0,
+          1991.0
+        ],
+        [
+          15.0,
+          1991.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          15.0,
+          641.0
+        ],
+        [
+          533.0,
+          641.0
+        ],
+        [
+          533.0,
+          1035.0
+        ],
+        [
+          15.0,
+          1035.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
     }
   ],
   "imagePath": "honor_EBG-AN00_2NSDU20526032516_0020.png",

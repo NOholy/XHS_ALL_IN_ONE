@@ -1,0 +1,99 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          976.0,
+          831.0
+        ],
+        [
+          1016.0,
+          831.0
+        ],
+        [
+          1016.0,
+          868.0
+        ],
+        [
+          976.0,
+          868.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          775.0,
+          99.0
+        ],
+        [
+          939.0,
+          99.0
+        ],
+        [
+          939.0,
+          173.0
+        ],
+        [
+          775.0,
+          173.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": null,
+      "points": [
+        [
+          39.0,
+          921.0
+        ],
+        [
+          1038.0,
+          921.0
+        ],
+        [
+          1038.0,
+          1099.0
+        ],
+        [
+          39.0,
+          1099.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "samsung_SM-N9600_2972a27dae1c7ece_0014.png",
+  "imageData": null,
+  "imageHeight": 2220,
+  "imageWidth": 1080,
+  "description": ""
+}

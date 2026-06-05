@@ -31,10 +31,40 @@
       "flags": {},
       "attributes": {},
       "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          547.0,
+          1464.0
+        ],
+        [
+          1063.0,
+          1464.0
+        ],
+        [
+          1063.0,
+          2238.0
+        ],
+        [
+          547.0,
+          2238.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
     }
   ],
   "imagePath": "honor_EBG-AN00_2NSDU20526032516_0022.png",
   "imageData": null,
   "imageHeight": 2340,
-  "imageWidth": 1080
+  "imageWidth": 1080,
+  "description": ""
 }

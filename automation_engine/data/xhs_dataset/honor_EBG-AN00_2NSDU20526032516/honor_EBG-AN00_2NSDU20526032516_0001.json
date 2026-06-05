@@ -321,6 +321,122 @@
       "flags": {},
       "attributes": {},
       "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          15.0,
+          273.0
+        ],
+        [
+          529.0,
+          273.0
+        ],
+        [
+          529.0,
+          956.0
+        ],
+        [
+          15.0,
+          956.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          549.0,
+          274.0
+        ],
+        [
+          1063.0,
+          274.0
+        ],
+        [
+          1063.0,
+          959.0
+        ],
+        [
+          549.0,
+          959.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          15.0,
+          1232.0
+        ],
+        [
+          530.0,
+          1232.0
+        ],
+        [
+          530.0,
+          1919.0
+        ],
+        [
+          15.0,
+          1919.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          550.0,
+          1237.0
+        ],
+        [
+          1061.0,
+          1237.0
+        ],
+        [
+          1061.0,
+          1921.0
+        ],
+        [
+          550.0,
+          1921.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
     }
   ],
   "imagePath": "honor_EBG-AN00_2NSDU20526032516_0001.png",

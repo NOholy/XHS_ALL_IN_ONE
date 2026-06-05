@@ -234,10 +234,127 @@
       "flags": {},
       "attributes": {},
       "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          18.0,
+          898.0
+        ],
+        [
+          649.0,
+          898.0
+        ],
+        [
+          649.0,
+          1375.0
+        ],
+        [
+          18.0,
+          1375.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          667.0,
+          830.0
+        ],
+        [
+          1294.0,
+          830.0
+        ],
+        [
+          1294.0,
+          1294.0
+        ],
+        [
+          667.0,
+          1294.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          669.0,
+          1620.0
+        ],
+        [
+          1292.0,
+          1620.0
+        ],
+        [
+          1292.0,
+          2452.0
+        ],
+        [
+          669.0,
+          2452.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "位置",
+      "score": null,
+      "points": [
+        [
+          830.0,
+          184.0
+        ],
+        [
+          934.0,
+          184.0
+        ],
+        [
+          934.0,
+          242.0
+        ],
+        [
+          830.0,
+          242.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
     }
   ],
   "imagePath": "huawei_PLA-AL10_3EV0225717013994_0003.png",
   "imageData": null,
   "imageHeight": 2832,
-  "imageWidth": 1316
+  "imageWidth": 1316,
+  "description": ""
 }

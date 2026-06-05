@@ -1,0 +1,128 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "赞",
+      "score": null,
+      "points": [
+        [
+          839.0,
+          721.0
+        ],
+        [
+          878.0,
+          721.0
+        ],
+        [
+          878.0,
+          757.0
+        ],
+        [
+          839.0,
+          757.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": null,
+      "points": [
+        [
+          774.0,
+          99.0
+        ],
+        [
+          939.0,
+          99.0
+        ],
+        [
+          939.0,
+          174.0
+        ],
+        [
+          774.0,
+          174.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "发送",
+      "score": null,
+      "points": [
+        [
+          895.0,
+          1132.0
+        ],
+        [
+          1047.0,
+          1132.0
+        ],
+        [
+          1047.0,
+          1219.0
+        ],
+        [
+          895.0,
+          1219.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": null,
+      "points": [
+        [
+          41.0,
+          919.0
+        ],
+        [
+          1038.0,
+          919.0
+        ],
+        [
+          1038.0,
+          1099.0
+        ],
+        [
+          41.0,
+          1099.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "samsung_SM-N9600_2972a27dae1c7ece_0010.png",
+  "imageData": null,
+  "imageHeight": 2220,
+  "imageWidth": 1080,
+  "description": ""
+}
