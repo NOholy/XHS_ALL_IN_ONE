@@ -1,0 +1,186 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "收藏",
+      "score": 0.9723647236824036,
+      "points": [
+        [
+          734.8486747741699,
+          2112.8074951171875
+        ],
+        [
+          798.084342956543,
+          2112.8074951171875
+        ],
+        [
+          798.084342956543,
+          2177.7982864379883
+        ],
+        [
+          734.8486747741699,
+          2177.7982864379883
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 0.8934246301651001,
+      "points": [
+        [
+          567.3060808181763,
+          2117.772228240967
+        ],
+        [
+          630.7657442092896,
+          2117.772228240967
+        ],
+        [
+          630.7657442092896,
+          2180.0153732299805
+        ],
+        [
+          567.3060808181763,
+          2180.0153732299805
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": 0.8777457475662231,
+      "points": [
+        [
+          773.8251113891602,
+          96.99069947004318
+        ],
+        [
+          936.7322959899902,
+          96.99069947004318
+        ],
+        [
+          936.7322959899902,
+          175.43183541297913
+        ],
+        [
+          773.8251113891602,
+          175.43183541297913
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "查看评论列表",
+      "score": 0.8083229660987854,
+      "points": [
+        [
+          900.5460605621338,
+          2110.722942352295
+        ],
+        [
+          962.9844074249268,
+          2110.722942352295
+        ],
+        [
+          962.9844074249268,
+          2180.0890502929688
+        ],
+        [
+          900.5460605621338,
+          2180.0890502929688
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": 0.8017186522483826,
+      "points": [
+        [
+          22.234806060791016,
+          2091.0401573181152
+        ],
+        [
+          521.0333919525146,
+          2091.0401573181152
+        ],
+        [
+          521.0333919525146,
+          2189.4888038635254
+        ],
+        [
+          22.234806060791016,
+          2189.4888038635254
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "返回",
+      "score": null,
+      "points": [
+        [
+          39.0,
+          111.0
+        ],
+        [
+          66.0,
+          111.0
+        ],
+        [
+          66.0,
+          161.0
+        ],
+        [
+          39.0,
+          161.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "samsung_SM-N9600_2972a27dae1c7ece_114706.png",
+  "imageData": null,
+  "imageHeight": 2220,
+  "imageWidth": 1080,
+  "description": ""
+}

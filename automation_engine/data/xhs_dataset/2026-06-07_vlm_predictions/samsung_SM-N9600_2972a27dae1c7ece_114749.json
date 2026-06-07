@@ -1,0 +1,244 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "已点赞",
+      "score": 1.0,
+      "points": [
+        [
+          401.20488,
+          2050.89705
+        ],
+        [
+          1043.13312,
+          2050.89705
+        ],
+        [
+          1043.13312,
+          2092.0891500000002
+        ],
+        [
+          401.20488,
+          2092.0891500000002
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已点赞",
+      "score": 1.0,
+      "points": [
+        [
+          405.5427000000001,
+          1172.8704
+        ],
+        [
+          1043.13258,
+          1172.8704
+        ],
+        [
+          1043.13258,
+          1218.39816
+        ],
+        [
+          405.5427000000001,
+          1218.39816
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已点赞",
+      "score": 1.0,
+      "points": [
+        [
+          405.54215999999997,
+          318.69099
+        ],
+        [
+          511.80768,
+          318.69099
+        ],
+        [
+          511.80768,
+          375.05901
+        ],
+        [
+          405.54215999999997,
+          375.05901
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "收藏",
+      "score": 1.0,
+      "points": [
+        [
+          403.37352,
+          1259.59026
+        ],
+        [
+          513.97632,
+          1259.59026
+        ],
+        [
+          513.97632,
+          1298.6134200000001
+        ],
+        [
+          403.37352,
+          1298.6134200000001
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": 1.0,
+      "points": [
+        [
+          706.9879800000001,
+          2133.28014
+        ],
+        [
+          802.40922,
+          2133.28014
+        ],
+        [
+          802.40922,
+          2185.3125
+        ],
+        [
+          706.9879800000001,
+          2185.3125
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已收藏",
+      "score": 1.0,
+      "points": [
+        [
+          403.37352,
+          1259.59026
+        ],
+        [
+          513.97632,
+          1259.59026
+        ],
+        [
+          513.97632,
+          1298.6134200000001
+        ],
+        [
+          403.37352,
+          1298.6134200000001
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 1.0,
+      "points": [
+        [
+          405.54216,
+          1255.2546
+        ],
+        [
+          507.4704,
+          1255.2546
+        ],
+        [
+          507.4704,
+          1300.78236
+        ],
+        [
+          405.54216,
+          1300.78236
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 1.0,
+      "points": [
+        [
+          407.7108,
+          323.02664999999996
+        ],
+        [
+          509.63903999999997,
+          323.02664999999996
+        ],
+        [
+          509.63903999999997,
+          366.38547
+        ],
+        [
+          407.7108,
+          366.38547
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "samsung_SM-N9600_2972a27dae1c7ece_114749.png",
+  "imageData": null,
+  "imageHeight": 2220,
+  "imageWidth": 1080,
+  "description": ""
+}

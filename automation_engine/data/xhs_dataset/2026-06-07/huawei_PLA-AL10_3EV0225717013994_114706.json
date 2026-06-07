@@ -1,0 +1,157 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "赞",
+      "score": 0.8777350783348083,
+      "points": [
+        [
+          670.0979736328125,
+          2696.3436630249025
+        ],
+        [
+          756.7473815917969,
+          2696.3436630249025
+        ],
+        [
+          756.7473815917969,
+          2779.5625076293945
+        ],
+        [
+          670.0979736328125,
+          2779.5625076293945
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "关注",
+      "score": 0.8775104284286499,
+      "points": [
+        [
+          913.2766250610351,
+          186.46882209777831
+        ],
+        [
+          1125.5864181518555,
+          186.46882209777831
+        ],
+        [
+          1125.5864181518555,
+          289.5166442871094
+        ],
+        [
+          913.2766250610351,
+          289.5166442871094
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "查看评论列表",
+      "score": 0.823760986328125,
+      "points": [
+        [
+          1102.9736526489257,
+          2687.5528106689453
+        ],
+        [
+          1191.8182754516602,
+          2687.5528106689453
+        ],
+        [
+          1191.8182754516602,
+          2779.05934753418
+        ],
+        [
+          1102.9736526489257,
+          2779.05934753418
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "输入评论",
+      "score": 0.7489742636680603,
+      "points": [
+        [
+          35.628353118896484,
+          2672.170101928711
+        ],
+        [
+          612.1729843139649,
+          2672.170101928711
+        ],
+        [
+          612.1729843139649,
+          2794.4647430419923
+        ],
+        [
+          35.628353118896484,
+          2794.4647430419923
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "返回",
+      "score": null,
+      "points": [
+        [
+          53.0,
+          201.0
+        ],
+        [
+          87.0,
+          201.0
+        ],
+        [
+          87.0,
+          267.0
+        ],
+        [
+          53.0,
+          267.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "huawei_PLA-AL10_3EV0225717013994_114706.png",
+  "imageData": null,
+  "imageHeight": 2832,
+  "imageWidth": 1316,
+  "description": ""
+}

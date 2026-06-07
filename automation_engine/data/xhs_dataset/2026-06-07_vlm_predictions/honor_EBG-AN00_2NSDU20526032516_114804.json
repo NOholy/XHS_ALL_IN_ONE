@@ -1,0 +1,215 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "已点赞",
+      "score": 1.0,
+      "points": [
+        [
+          526.27158,
+          2207.46006
+        ],
+        [
+          622.3732200000001,
+          2207.46006
+        ],
+        [
+          622.3732200000001,
+          2296.5813000000003
+        ],
+        [
+          526.27158,
+          2296.5813000000003
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "收藏",
+      "score": 1.0,
+      "points": [
+        [
+          647.5431600000001,
+          2212.03125
+        ],
+        [
+          734.4918000000001,
+          2212.03125
+        ],
+        [
+          734.4918000000001,
+          2296.5824700000003
+        ],
+        [
+          647.5431600000001,
+          2296.5824700000003
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 1.0,
+      "points": [
+        [
+          423.30546000000004,
+          2207.4612300000003
+        ],
+        [
+          519.4071,
+          2207.4612300000003
+        ],
+        [
+          519.4071,
+          2301.15249
+        ],
+        [
+          423.30546000000004,
+          2301.15249
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 1.0,
+      "points": [
+        [
+          0.0,
+          301.64004
+        ],
+        [
+          1080.0,
+          301.64004
+        ],
+        [
+          1080.0,
+          1741.2875999999999
+        ],
+        [
+          0.0,
+          1741.2875999999999
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": 1.0,
+      "points": [
+        [
+          121.27104,
+          164.53125
+        ],
+        [
+          233.39016,
+          164.53125
+        ],
+        [
+          233.39016,
+          274.21875
+        ],
+        [
+          121.27104,
+          274.21875
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已关注",
+      "score": 1.0,
+      "points": [
+        [
+          725.33934,
+          175.95747
+        ],
+        [
+          919.83114,
+          175.95747
+        ],
+        [
+          919.83114,
+          262.79253
+        ],
+        [
+          725.33934,
+          262.79253
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "返回",
+      "score": 1.0,
+      "points": [
+        [
+          25.169400000000003,
+          180.52749
+        ],
+        [
+          89.23715999999999,
+          180.52749
+        ],
+        [
+          89.23715999999999,
+          255.93867
+        ],
+        [
+          25.169400000000003,
+          255.93867
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_114804.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}

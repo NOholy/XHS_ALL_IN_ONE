@@ -1,0 +1,331 @@
+{
+  "version": "4.0.0-beta.7",
+  "flags": {},
+  "checked": false,
+  "shapes": [
+    {
+      "label": "位置",
+      "score": 0.9834912419319153,
+      "points": [
+        [
+          685.6019954681395,
+          180.0017884969711
+        ],
+        [
+          773.6075134277343,
+          180.0017884969711
+        ],
+        [
+          773.6075134277343,
+          226.04980695247647
+        ],
+        [
+          685.6019954681395,
+          226.04980695247647
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "我",
+      "score": 0.973105251789093,
+      "points": [
+        [
+          949.7148427963256,
+          2248.8711376190186
+        ],
+        [
+          991.8920431137084,
+          2248.8711376190186
+        ],
+        [
+          991.8920431137084,
+          2294.951402664184
+        ],
+        [
+          949.7148427963256,
+          2294.951402664184
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "消息",
+      "score": 0.9104326963424683,
+      "points": [
+        [
+          708.793207168579,
+          2231.2234382629395
+        ],
+        [
+          814.2277278900145,
+          2231.2234382629395
+        ],
+        [
+          814.2277278900145,
+          2296.819919586181
+        ],
+        [
+          708.793207168579,
+          2296.819919586181
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 0.875283420085907,
+      "points": [
+        [
+          905.4728565216063,
+          292.85705566406244
+        ],
+        [
+          947.0760898590087,
+          292.85705566406244
+        ],
+        [
+          947.0760898590087,
+          331.67157268524164
+        ],
+        [
+          905.4728565216063,
+          331.67157268524164
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "发现",
+      "score": 0.8141549825668335,
+      "points": [
+        [
+          494.19248771667475,
+          179.00090289115903
+        ],
+        [
+          584.1307926177977,
+          179.00090289115903
+        ],
+        [
+          584.1307926177977,
+          244.24685597419736
+        ],
+        [
+          494.19248771667475,
+          244.24685597419736
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已点赞",
+      "score": 0.7929812073707581,
+      "points": [
+        [
+          909.4667472839354,
+          1251.3935165405271
+        ],
+        [
+          949.0392265319823,
+          1251.3935165405271
+        ],
+        [
+          949.0392265319823,
+          1292.1759681701658
+        ],
+        [
+          909.4667472839354,
+          1292.1759681701658
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "赞",
+      "score": 0.5342207551002502,
+      "points": [
+        [
+          432.28773880004877,
+          268.8130667209625
+        ],
+        [
+          475.75881958007807,
+          268.8130667209625
+        ],
+        [
+          475.75881958007807,
+          301.8321239948272
+        ],
+        [
+          432.28773880004877,
+          301.8321239948272
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "视频帖子",
+      "score": null,
+      "points": [
+        [
+          541.0,
+          1346.0
+        ],
+        [
+          1064.0,
+          1346.0
+        ],
+        [
+          1064.0,
+          2037.0
+        ],
+        [
+          541.0,
+          2037.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "视频帖子",
+      "score": null,
+      "points": [
+        [
+          21.0,
+          1317.0
+        ],
+        [
+          531.0,
+          1317.0
+        ],
+        [
+          531.0,
+          2000.0
+        ],
+        [
+          21.0,
+          2000.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "帖子封面",
+      "score": null,
+      "points": [
+        [
+          550.0,
+          385.0
+        ],
+        [
+          1061.0,
+          385.0
+        ],
+        [
+          1061.0,
+          1072.0
+        ],
+        [
+          550.0,
+          1072.0
+        ]
+      ],
+      "group_id": null,
+      "description": null,
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    },
+    {
+      "label": "已点赞",
+      "score": null,
+      "points": [
+        [
+          414.0,
+          1223.0
+        ],
+        [
+          454.0,
+          1223.0
+        ],
+        [
+          454.0,
+          1260.0
+        ],
+        [
+          414.0,
+          1260.0
+        ]
+      ],
+      "group_id": null,
+      "description": "",
+      "difficult": false,
+      "shape_type": "rectangle",
+      "flags": {},
+      "attributes": {},
+      "kie_linking": []
+    }
+  ],
+  "imagePath": "honor_EBG-AN00_2NSDU20526032516_114444.png",
+  "imageData": null,
+  "imageHeight": 2340,
+  "imageWidth": 1080,
+  "description": ""
+}
