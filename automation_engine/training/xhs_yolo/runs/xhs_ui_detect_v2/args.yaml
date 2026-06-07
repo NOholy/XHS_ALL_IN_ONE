@@ -1,18 +1,18 @@
 task: detect
 mode: train
 model: yolov8s.pt
-data: /Users/qi/ai-code-project/XHS_ALL_IN_ONE/automation_engine/data/xhs_dataset/augmented_yolo_v2/dataset.yaml
-epochs: 150
+data: C:\Users\25831\PycharmProjects\XHS_ALL_IN_ONE\automation_engine\data\xhs_dataset\augmented_yolo_v2\dataset.yaml
+epochs: 200
 time: null
 patience: 30
-batch: 8
+batch: 4
 imgsz: 1280
 save: true
 save_period: -1
 cache: false
-device: mps
+device: '0'
 workers: 4
-project: /Users/qi/ai-code-project/XHS_ALL_IN_ONE/automation_engine/training/xhs_yolo/runs
+project: C:\Users\25831\PycharmProjects\XHS_ALL_IN_ONE\automation_engine\training\xhs_yolo\runs
 name: xhs_ui_detect_v2
 exist_ok: true
 pretrained: true
@@ -23,7 +23,7 @@ deterministic: true
 single_cls: false
 rect: false
 cos_lr: true
-close_mosaic: 20
+close_mosaic: 10
 resume: false
 amp: true
 fraction: 1.0
@@ -79,7 +79,7 @@ warmup_epochs: 5
 warmup_momentum: 0.8
 warmup_bias_lr: 0.1
 box: 7.5
-cls: 0.5
+cls: 1.5
 cls_pw: 0.0
 dfl: 1.5
 pose: 12.0
@@ -98,7 +98,7 @@ perspective: 0.0
 flipud: 0.0
 fliplr: 0.0
 bgr: 0.0
-mosaic: 0.5
+mosaic: 0.0
 mixup: 0.0
 cutmix: 0.0
 copy_paste: 0.0
@@ -107,4 +107,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: /Users/qi/ai-code-project/XHS_ALL_IN_ONE/automation_engine/training/xhs_yolo/runs/xhs_ui_detect_v2
+save_dir: C:\Users\25831\PycharmProjects\XHS_ALL_IN_ONE\automation_engine\training\xhs_yolo\runs\xhs_ui_detect_v2
