@@ -4,7 +4,7 @@
   "checked": false,
   "shapes": [
     {
-      "label": "已点赞",
+      "label": "赞",
       "score": 1.0,
       "points": [
         [
@@ -33,7 +33,7 @@
       "kie_linking": []
     },
     {
-      "label": "已点赞",
+      "label": "赞",
       "score": 1.0,
       "points": [
         [
@@ -62,7 +62,7 @@
       "kie_linking": []
     },
     {
-      "label": "已点赞",
+      "label": "赞",
       "score": 1.0,
       "points": [
         [

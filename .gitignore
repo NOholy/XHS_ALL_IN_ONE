@@ -40,3 +40,11 @@ AGENTS.md
 .pytest_cache
 docx
 obscura_bin/
+
+*.pt
+*.onnx
+
+automation_engine/data/xhs_dataset/augmented_yolo_*
+automation_engine/training/xhs_yolo/runs/
+
+upload_release.py
