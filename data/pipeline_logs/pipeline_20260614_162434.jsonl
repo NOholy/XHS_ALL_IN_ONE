@@ -1,8 +1,0 @@
-{"timestamp": "2026-06-14T16:24:44", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
-{"timestamp": "2026-06-14T16:24:47", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 3449}
-{"timestamp": "2026-06-14T16:24:59", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
-{"timestamp": "2026-06-14T16:25:01", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 1625}
-{"timestamp": "2026-06-14T16:25:12", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
-{"timestamp": "2026-06-14T16:25:12", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 4}
-{"timestamp": "2026-06-14T16:25:25", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
-{"timestamp": "2026-06-14T16:25:26", "event": "action_fail", "node": "Branch_Browse", "action_type": "swipe", "success": false, "duration_ms": 1447}

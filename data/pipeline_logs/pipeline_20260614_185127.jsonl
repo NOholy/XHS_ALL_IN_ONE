@@ -1,4 +1,0 @@
-{"timestamp": "2026-06-14T18:51:34", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1170], "text": null}
-{"timestamp": "2026-06-14T18:51:41", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 6629}
-{"timestamp": "2026-06-14T18:51:46", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1170], "text": null}
-{"timestamp": "2026-06-14T18:52:01", "event": "action_fail", "node": "Farm_NavigateHome", "action_type": "navigate", "success": false, "duration_ms": 15108}

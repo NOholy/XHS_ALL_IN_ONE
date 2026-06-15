@@ -47,4 +47,10 @@ obscura_bin/
 automation_engine/data/xhs_dataset/augmented_yolo_*
 automation_engine/training/xhs_yolo/runs/
 
+# Runtime data & logs
+data/pipeline_logs/
+data/farmed_actions.json
+data/*.db
+data/*.jsonl
+
 upload_release.py
