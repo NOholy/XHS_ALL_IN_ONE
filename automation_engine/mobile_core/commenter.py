@@ -150,15 +150,29 @@ class SmartCommenter:
         执行评论：点击回复框 → 输入文本 → 发送 → OCR验证。
         live 参数如果不传，使用 config.intercept.live_mode。
         返回是否成功。
+
+        注意：Stealth IME 的生命周期由 init_flow 全局管理（启动时激活、退出时还原），
+        此处不再进行局部切换，避免高频 ACTION_INPUT_METHOD_CHANGED 广播暴露机刷特征。
         """
         if live is None:
             live = self.config.intercept.live_mode
+
+        # 获取 IME 客户端引用（仅用于打字，不做切换）
+        ime = None
+        if self.config.device.typing_mode == "clipboard":
+            if hasattr(self.driver, '_ime_client') and self.driver._ime_client:
+                ime = self.driver._ime_client
+            elif hasattr(self.driver, 'ime_client') and self.driver.ime_client:
+                ime = self.driver.ime_client
+            else:
+                from .stealth_ime_client import StealthIMEClient
+                ime = StealthIMEClient(serial=getattr(self.driver, 'serial', None))
 
         img_before_click = self.driver.screenshot()
         logger.info(f"Tapping reply box at ({reply_x}, {reply_y})")
         self.driver.physical_tap(reply_x, reply_y)
         self.driver.human_sleep(2.0, 1.0)
-        
+
         # Watchdog: 校验键盘是否真的弹起（使用绝对的 OCR 语义特征，无视视频干扰）
         img_after_click = self.driver.screenshot()
         matches_send = self.ocr.find_text(img_after_click, "发送", conf_threshold=0.6)
@@ -170,13 +184,8 @@ class SmartCommenter:
         # 输入文本
         logger.info(f"Typing: '{text}' (mode: {self.config.device.typing_mode})")
         if self.config.device.typing_mode == "clipboard":
-            # Agentless clipboard hack via ADB broadcast (requires Clipper) or standard text
-            logger.info("Using ADB text input fallback for clipboard mode")
-            # Encode base64 to avoid shell escaping issues if needed, or use simple input text
-            # Note: adb shell input text doesn't support Chinese natively without ADBKeyboard.
-            # We fallback to pure vision keyboard or ADBKeyboard broadcast.
-            import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", text], timeout=10)
+            # 逐字拟人输入
+            ime.type_text(text)
             self.driver.human_sleep(1.5, 0.5)
         else:
             self.keyboard.type_chinese(text)

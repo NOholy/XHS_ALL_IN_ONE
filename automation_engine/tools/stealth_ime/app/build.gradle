@@ -1,0 +1,36 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdkVersion 33
+    namespace "com.android.inputservice.core"
+
+    defaultConfig {
+        applicationId "com.android.inputservice.core"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            // 开启代码混淆 — 把类名/方法名全部混淆为 a, b, c
+            // 这样即使风控 SDK 扫描 Dex 指纹也无法与原版 ADBKeyBoard 匹配
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // 无外部依赖 — 纯 Android SDK 原生 API
+}

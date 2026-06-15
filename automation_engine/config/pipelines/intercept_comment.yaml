@@ -1,0 +1,579 @@
+# ============================================================
+#  intercept_comment.yaml — 话题搜索评论截流 Pipeline
+#
+#  完整 DAG 流程:
+#    确保前台 → 首页 → 搜索 → 输入关键词 → 提交 → 等待结果
+#    → 提取筛选 → 检查目标 → 伪装浏览 → 进入帖子 → 验证身份
+#    → 生成评论 → 定位输入框 → 等待键盘 → 输入评论 → 发送
+#    → 验证发送 → 冷却 → 概率换 IP → 循环
+#
+#  参考: intercept_flow.py InterceptOrchestrator
+# ============================================================
+
+description: "话题搜索评论截流 Pipeline — 搜索话题 → 筛选帖子 → 伪装浏览 → 智能评论 → 冷却循环"
+
+defaults:
+  rate_limit: 1000
+  timeout: 15000
+  pre_delay: [200, 800]
+  post_delay: [300, 1000]
+
+# ============================================================
+#  节点定义
+# ============================================================
+
+nodes:
+
+  # ----------------------------------------------------------
+  #  Phase 1: 启动 & 前台保障
+  # ----------------------------------------------------------
+
+  Ensure_XHS_Foreground:
+    description: "确保小红书在前台运行，若不在则启动 App"
+    recognition:
+      type: activity_detect
+      expected: "com.xingin.xhs"
+    action:
+      type: launch_app
+      package: "com.xingin.xhs"
+    next:
+      - Navigate_Home
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_AppRestart
+    timeout: 10000
+    post_delay: [1000, 2000]
+
+  # ----------------------------------------------------------
+  #  Phase 2: 导航到首页
+  # ----------------------------------------------------------
+
+  Navigate_Home:
+    description: "点击底部首页 Tab，确保回到首页"
+    recognition:
+      type: or
+      any_of:
+        - type: ocr_text
+          expected: "首页"
+          roi: [0.0, 0.9, 1.0, 0.1]
+          threshold: 0.6
+        - type: template_match
+          template: "tab_home"
+          roi: [0.0, 0.9, 1.0, 0.1]
+          threshold: 0.75
+    action:
+      type: tap
+      target: true
+      noise: 10
+    next:
+      - Navigate_Search
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_NavigateHome
+    timeout: 8000
+    post_delay: [500, 1000]
+
+  # ----------------------------------------------------------
+  #  Phase 3: 导航到搜索页
+  # ----------------------------------------------------------
+
+  Navigate_Search:
+    description: "找到并点击搜索入口"
+    recognition:
+      type: or
+      any_of:
+        - type: template_match
+          template: "icon_search"
+          roi: [0.6, 0.0, 0.4, 0.1]
+          threshold: 0.75
+        - type: ocr_text
+          expected: "搜索"
+          roi: [0.0, 0.0, 1.0, 0.15]
+          threshold: 0.6
+    action:
+      type: tap
+      target: true
+      noise: 12
+    next:
+      - Wait_Keyboard
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_PressBack
+    timeout: 10000
+    post_delay: [500, 1200]
+
+  # ----------------------------------------------------------
+  #  Phase 4: 等待搜索键盘弹出
+  # ----------------------------------------------------------
+
+  Wait_Keyboard:
+    description: "等待搜索输入框键盘弹出 (通过 Activity 检测键盘可见)"
+    recognition:
+      type: activity_detect
+      expected: "keyboard_visible"
+    action:
+      type: do_nothing
+    next:
+      - Input_Keyword
+    on_error:
+      - Navigate_Search
+    timeout: 8000
+    rate_limit: 500
+
+  # ----------------------------------------------------------
+  #  Phase 5: 输入搜索关键词
+  # ----------------------------------------------------------
+
+  Input_Keyword:
+    description: "通过剪贴板粘贴输入当前搜索关键词"
+    recognition:
+      type: direct_hit
+    action:
+      type: clipboard_input
+      text: "{{context.current_keyword}}"
+    next:
+      - Submit_Search
+    on_error:
+      - Error_PressBack
+    pre_delay: [300, 600]
+    post_delay: [200, 500]
+
+  # ----------------------------------------------------------
+  #  Phase 6: 提交搜索
+  # ----------------------------------------------------------
+
+  Submit_Search:
+    description: "点击搜索按钮提交搜索，若找不到按钮则 fallback 发送回车键"
+    recognition:
+      type: or
+      any_of:
+        - type: ocr_text
+          expected: "搜索"
+          roi: [0.7, 0.0, 0.3, 0.1]
+          threshold: 0.6
+        - type: template_match
+          template: "btn_search_submit"
+          roi: [0.7, 0.0, 0.3, 0.1]
+          threshold: 0.7
+    action:
+      type: tap
+      target: true
+      noise: 10
+      fallback_keyevent: 66
+    next:
+      - Wait_SearchResults
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_PressBack
+    timeout: 8000
+    post_delay: [800, 1500]
+
+  # ----------------------------------------------------------
+  #  Phase 7: 等待搜索结果加载
+  # ----------------------------------------------------------
+
+  Wait_SearchResults:
+    description: "视觉断言 — 等待搜索结果卡片加载完成 (替代 time.sleep(3.0))"
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.detect_search_results_loaded"
+      params:
+        min_cards: 2
+        card_min_area_ratio: 0.03
+    action:
+      type: do_nothing
+    next:
+      - Extract_FilterResults
+    on_error:
+      - Error_PressBack
+    timeout: 10000
+    rate_limit: 800
+    pre_wait_freezes: 1500
+
+  # ----------------------------------------------------------
+  #  Phase 8: 提取并过滤搜索结果
+  # ----------------------------------------------------------
+
+  Extract_FilterResults:
+    description: "提取搜索结果列表，按标题关键词过滤出目标帖子"
+    recognition:
+      type: direct_hit
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.extract_and_filter_results"
+      params:
+        title_filter_from_config: true
+        max_search_pages: 3
+        output_anchor: "target_posts"
+    next:
+      - Check_TargetList
+    on_error:
+      - Error_NavigateHome
+
+  # ----------------------------------------------------------
+  #  Phase 9: 检查目标列表是否为空
+  # ----------------------------------------------------------
+
+  Check_TargetList:
+    description: "校验筛选后的目标帖子列表不为空，为空则回首页跳过"
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.check_targets_not_empty"
+      params:
+        anchor_key: "target_posts"
+    action:
+      type: do_nothing
+    next:
+      - Camouflage_Browse
+    on_error:
+      - Navigate_Home
+    timeout: 3000
+
+  # ----------------------------------------------------------
+  #  Phase 10: 伪装浏览 (50% 概率)
+  # ----------------------------------------------------------
+
+  Camouflage_Browse:
+    description: "50% 概率执行随机伪装浏览，打乱行为序列避免模式识别"
+    probability: 0.5
+    recognition:
+      type: direct_hit
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.camouflage_browse"
+      params:
+        browse_min: 5
+        browse_max: 10
+        enter_probability: 0.2
+        read_duration: [3000, 7000]
+    next:
+      - Enter_TargetPost
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Enter_TargetPost
+    pre_delay: [500, 1000]
+    post_delay: [1000, 2000]
+
+  # ----------------------------------------------------------
+  #  Phase 11: 进入目标帖子
+  # ----------------------------------------------------------
+
+  Enter_TargetPost:
+    description: "点击目标帖子进入详情页"
+    recognition:
+      type: direct_hit
+    action:
+      type: tap
+      target: "{{anchor.target_posts[0]}}"
+      noise: 15
+    next:
+      - Wait_PostDetail
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_NavigateHome
+    post_delay: [800, 1500]
+
+  # ----------------------------------------------------------
+  #  Phase 12: 等待帖子详情页加载
+  # ----------------------------------------------------------
+
+  Wait_PostDetail:
+    description: "视觉断言 — 帖子详情页加载完成 (Activity 检测 + OCR 评论入口) (替代 human_sleep(3.0))"
+    recognition:
+      type: and
+      all_of:
+        - type: activity_detect
+          expected: "post_detail"
+        - type: ocr_text
+          expected: "说点什么"
+          roi: [0.0, 0.85, 1.0, 0.15]
+          threshold: 0.5
+    action:
+      type: do_nothing
+    next:
+      - Verify_PostIdentity
+    on_error:
+      - Error_PressBack
+    timeout: 15000
+    rate_limit: 800
+    pre_wait_freezes: 1500
+
+  # ----------------------------------------------------------
+  #  Phase 13: 验证帖子身份 (特征锚点双重校验)
+  # ----------------------------------------------------------
+
+  Verify_PostIdentity:
+    description: "确认进入的是正确的目标帖子，防止误点广告或推荐帖"
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.verify_post_identity"
+      params:
+        anchor_key: "target_posts"
+        anchor_chars: 4
+    action:
+      type: do_nothing
+    next:
+      - Generate_HookComment
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_PressBack
+    timeout: 5000
+
+  # ----------------------------------------------------------
+  #  Phase 14: LLM 生成钩子评论
+  # ----------------------------------------------------------
+
+  Generate_HookComment:
+    description: "使用 LLM 生成引流钩子评论文本"
+    quota_check: "daily_comments"
+    recognition:
+      type: direct_hit
+    action:
+      type: llm_generate
+      prompt_template: "intercept_comment"
+      output_anchor: "comment_text"
+      context_from: "{{anchor.target_posts[0]}}"
+    next:
+      - Find_CommentInput
+    on_error:
+      - Error_PressBack
+    timeout: 30000
+    pre_delay: [500, 1000]
+
+  # ----------------------------------------------------------
+  #  Phase 15: 定位评论输入框
+  # ----------------------------------------------------------
+
+  Find_CommentInput:
+    description: "定位帖子底部评论输入框 (模板匹配或 OCR)"
+    recognition:
+      type: or
+      any_of:
+        - type: template_match
+          template: "comment_input_box"
+          roi: [0.0, 0.8, 1.0, 0.2]
+          threshold: 0.7
+        - type: ocr_text
+          expected: "说点什么|写评论|友好评论"
+          roi: [0.0, 0.8, 1.0, 0.2]
+          threshold: 0.5
+    action:
+      type: tap
+      target: true
+      noise: 10
+    next:
+      - Wait_CommentKeyboard
+    on_error:
+      - Error_PressBack
+    timeout: 10000
+
+  # ----------------------------------------------------------
+  #  Phase 16: 等待评论键盘弹出
+  # ----------------------------------------------------------
+
+  Wait_CommentKeyboard:
+    description: "等待评论输入键盘弹出 (Activity 检测键盘 + OCR 发送按钮)"
+    recognition:
+      type: or
+      any_of:
+        - type: activity_detect
+          expected: "keyboard_visible"
+        - type: ocr_text
+          expected: "发送"
+          roi: [0.7, 0.85, 0.3, 0.15]
+          threshold: 0.6
+    action:
+      type: do_nothing
+    next:
+      - Type_Comment
+    on_error:
+      - Find_CommentInput
+    timeout: 8000
+    rate_limit: 500
+
+  # ----------------------------------------------------------
+  #  Phase 17: 输入评论文本
+  # ----------------------------------------------------------
+
+  Type_Comment:
+    description: "通过剪贴板粘贴输入 LLM 生成的评论文本"
+    recognition:
+      type: direct_hit
+    action:
+      type: clipboard_input
+      text: "{{anchor.comment_text}}"
+    next:
+      - Click_Send
+    on_error:
+      - Error_PressBack
+    pre_delay: [300, 800]
+    post_delay: [500, 1000]
+
+  # ----------------------------------------------------------
+  #  Phase 18: 点击发送按钮
+  # ----------------------------------------------------------
+
+  Click_Send:
+    description: "点击发送按钮提交评论"
+    recognition:
+      type: or
+      any_of:
+        - type: template_match
+          template: "btn_send_comment"
+          roi: [0.6, 0.8, 0.4, 0.2]
+          threshold: 0.7
+        - type: ocr_text
+          expected: "发送"
+          roi: [0.6, 0.85, 0.4, 0.15]
+          threshold: 0.6
+    action:
+      type: tap
+      target: true
+      noise: 8
+    next:
+      - Verify_CommentPosted
+      - "[JumpBack]PopupHandler"
+    on_error:
+      - Error_PressBack
+    timeout: 8000
+    post_delay: [500, 1000]
+
+  # ----------------------------------------------------------
+  #  Phase 19: 验证评论发送成功
+  # ----------------------------------------------------------
+
+  Verify_CommentPosted:
+    description: "视觉断言 — OCR 检测评论前4个字出现在页面上 (替代 human_sleep(4.0))"
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.verify_comment_posted"
+      params:
+        anchor_key: "comment_text"
+        verify_chars: 4
+        search_roi: [0.0, 0.3, 1.0, 0.6]
+    action:
+      type: do_nothing
+    next:
+      - Cooldown_Wait
+    on_error:
+      - Error_PressBack
+    timeout: 15000
+    rate_limit: 1000
+
+  # ----------------------------------------------------------
+  #  Phase 20: 评论冷却等待
+  # ----------------------------------------------------------
+
+  Cooldown_Wait:
+    description: "评论后冷却等待，使用配置的冷却时间范围"
+    recognition:
+      type: direct_hit
+    action:
+      type: wait
+      duration:
+        - "{{config.risk_control.comment_cooldown_min}}"
+        - "{{config.risk_control.comment_cooldown_max}}"
+    next:
+      - Maybe_RotateIP
+    on_error: []
+    pre_delay: [200, 500]
+
+  # ----------------------------------------------------------
+  #  Phase 21: 概率性 IP 轮换 (33%)
+  # ----------------------------------------------------------
+
+  Maybe_RotateIP:
+    description: "33% 概率执行飞行模式 IP 轮换，降低 IP 关联风险"
+    probability: 0.33
+    recognition:
+      type: direct_hit
+    action:
+      type: ip_rotate
+      params:
+        delay_seconds: "{{config.risk_control.ip_rotate_delay}}"
+    next:
+      - Navigate_Home
+    on_error:
+      - Navigate_Home
+    post_delay: [2000, 4000]
+
+  # ----------------------------------------------------------
+  #  全局弹窗拦截器 (JumpBack 模式)
+  # ----------------------------------------------------------
+
+  PopupHandler:
+    description: "[JumpBack] 全局弹窗/风控拦截 — 检测并自动关闭系统弹窗、权限请求、风控提示"
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.detect_popup"
+      params:
+        auto_dismiss: true
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.dismiss_popup"
+      params:
+        dismiss_keywords:
+          - "我知道了"
+          - "确定"
+          - "取消"
+          - "关闭"
+          - "稍后再说"
+          - "暂不"
+          - "允许"
+        risk_keywords:
+          - "账号异常"
+          - "操作频繁"
+          - "验证"
+          - "安全"
+    next: []
+    on_error: []
+    timeout: 3000
+    rate_limit: 500
+    tags:
+      - "watchdog"
+      - "global"
+
+  # ----------------------------------------------------------
+  #  错误恢复节点
+  # ----------------------------------------------------------
+
+  Error_PressBack:
+    description: "错误恢复 — 按返回键退出当前页面"
+    recognition:
+      type: direct_hit
+    action:
+      type: press_back
+    next:
+      - Navigate_Home
+    on_error: []
+    post_delay: [500, 1000]
+
+  Error_NavigateHome:
+    description: "错误恢复 — 强制导航回首页"
+    recognition:
+      type: direct_hit
+    action:
+      type: navigate
+      target_page: "home"
+    next:
+      - Navigate_Search
+    on_error:
+      - Error_AppRestart
+    timeout: 10000
+    post_delay: [1000, 2000]
+
+  Error_AppRestart:
+    description: "错误恢复 — 强制重启小红书 App"
+    recognition:
+      type: direct_hit
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.intercept.force_restart_app"
+      params:
+        package: "com.xingin.xhs"
+        wait_after_restart: 5000
+    next:
+      - Ensure_XHS_Foreground
+    on_error: []
+    timeout: 30000
+    post_delay: [3000, 5000]

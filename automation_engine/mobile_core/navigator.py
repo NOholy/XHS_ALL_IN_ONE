@@ -35,7 +35,7 @@ class XHSNavigator:
         通过 OCR + 模板匹配判断当前处于哪个页面。
         返回页面类型常量。
         """
-        # Fast path: Activity 级别检测（~50ms，零风控风险）
+        # Fast path: Activity 级别检测
         if self.page_detector:
             fast_result = self.page_detector.detect_page_fast()
             if fast_result != "unknown":
@@ -46,34 +46,36 @@ class XHSNavigator:
         img = self.driver.screenshot()
 
         # 1. 检测搜索结果页（有搜索框+结果列表）
-        search_results_indicators = self.ocr.find_text(img, "搜索", conf_threshold=0.6)
         note_cards = self.vision.detect_cards_waterfall(img)
-
-        # 2. 检测帖子详情页（有评论输入框）
-        comment_input = self.vision.find_template(img, "comment_input", threshold=0.7)
-        reply_btn = self.vision.find_template(img, "reply_button", threshold=0.7)
-
-        # 3. 检测底部Tab来判断首页/个人主页
-        tab_home = self.vision.find_template(img, "tab_home", threshold=0.7)
-        tab_profile = self.vision.find_template(img, "tab_profile", threshold=0.7)
-
-        # 4. 搜索页（有搜索输入框但无结果）
-        search_input = self.vision.find_template(img, "search_input", threshold=0.7)
+        
+        # 为了极速性能，只请求一次 OCR 并在本地分析
+        search_results_indicators = False
+        comment_ocr = False
+        profile_indicators = False
+        home_indicators = False
+        
+        try:
+            ocr_raw = self.ocr.ocr_image(img)
+            parsed_text = [text for box, text, conf in self.ocr.safe_parse_results(ocr_raw) if conf >= 0.6]
+            # Check all indicators against the single parsed text list
+            search_results_indicators = any("搜索" in t for t in parsed_text)
+            comment_ocr = any("说点什么" in t for t in parsed_text)
+            profile_indicators = any("编辑资料" in t for t in parsed_text)
+            # Home indicator usually needs higher confidence, but here we just check text presence
+            home_indicators = any("推荐" in t for t in parsed_text)
+        except Exception as e:
+            logger.warning(f"OCR fallback failed during detect_current_page: {e}")
 
         # 判断逻辑
-        if comment_input or reply_btn:
+        if comment_ocr:
             return PAGE_POST_DETAIL
-        if search_input and not note_cards:
-            return PAGE_SEARCH
-        if search_results_indicators and note_cards:
-            return PAGE_SEARCH_RESULTS
-
-        # OCR 检测个人主页标志
-        profile_indicators = self.ocr.find_text(img, "编辑资料", conf_threshold=0.6)
         if profile_indicators:
             return PAGE_PROFILE
-
-        if tab_home and note_cards:
+        if search_results_indicators and note_cards:
+            return PAGE_SEARCH_RESULTS
+        if home_indicators:
+            return PAGE_HOME_FEED
+        if note_cards:
             return PAGE_HOME_FEED
 
         return PAGE_UNKNOWN
@@ -82,7 +84,12 @@ class XHSNavigator:
         """确保回到首页推荐流"""
         current = self.detect_current_page()
         if current == PAGE_HOME_FEED:
-            logger.info("Already on home feed.")
+            logger.info("Detected home feed Activity, but tapping Home tab anyway to ensure we are not trapped in Profile tab.")
+            w_screen, h_screen = self.driver.get_screen_size()
+            tab_y = int(h_screen * 0.96)
+            tab_x = int(w_screen * 0.1)
+            self.driver.physical_tap(tab_x, tab_y)
+            self.driver.human_sleep(1.0, 0.5)
             return True
 
         logger.info("Not on home feed. Starting smart backtrack to home...")
@@ -122,7 +129,7 @@ class XHSNavigator:
             logger.info(f"Clicking search icon at ({search_icon['x']}, {search_icon['y']})")
             self.driver.physical_tap(search_icon['x'], search_icon['y'])
             self.driver.human_sleep(2.0, 1.0)
-            return self.detect_current_page() == PAGE_SEARCH
+            return True
 
         # 2. Fallback: OCR 查找 "搜索" 文字
         matches = self.ocr.find_text(img, "搜索", conf_threshold=0.7)
@@ -131,16 +138,18 @@ class XHSNavigator:
             logger.info(f"OCR found '搜索' at ({target['x']}, {target['y']})")
             self.driver.physical_tap(target['x'], target['y'])
             self.driver.human_sleep(2.0, 1.0)
-            return self.detect_current_page() == PAGE_SEARCH
+            return True
 
         # 3. Fallback: 点击顶部右侧区域（搜索图标的常见位置）
-        w = self.config.device.screen_width
-        h = self.config.device.screen_height
+        w = self.driver._screen_w or 1080
+        h = self.driver._screen_h or 2220
         logger.info(f"Fallback: tapping search area at ({int(w * 0.85)}, {int(h * 0.05)})")
         self.driver.physical_tap(int(w * 0.85), int(h * 0.05))
         self.driver.human_sleep(2.0, 1.0)
         
-        return self.detect_current_page() == PAGE_SEARCH
+        # Note: Search page shares the same IndexActivityV2 as Home Feed, so detect_current_page() will return "home_feed".
+        # We assume the click was successful.
+        return True
 
     def go_profile(self):
         """进入个人主页"""
@@ -156,8 +165,9 @@ class XHSNavigator:
         logger.info(f"Clicking profile tab at fixed coordinate ({tab_x}, {tab_y})")
         self.driver.physical_tap(tab_x, tab_y)
         self.driver.human_sleep(2.0, 1.0)
-        
-        return self.detect_current_page() == PAGE_PROFILE
+        # Note: Profile tab shares the same IndexActivityV2 as Home Feed, so detect_current_page() will return "home_feed".
+        # We assume the click was successful.
+        return True
 
     def go_back(self):
         """智能返回：先尝试视觉关闭按钮，再用物理Back键（带键盘吸附防御）"""

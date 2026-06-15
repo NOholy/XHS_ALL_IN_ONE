@@ -1,0 +1,24 @@
+{"timestamp": "2026-06-14T16:33:14", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:33:21", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 6637}
+{"timestamp": "2026-06-14T16:33:25", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:33:26", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 1653}
+{"timestamp": "2026-06-14T16:33:30", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:33:30", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 9}
+{"timestamp": "2026-06-14T16:33:33", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:33:40", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 6665}
+{"timestamp": "2026-06-14T16:33:42", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:33:42", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-14T16:33:43", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:33:49", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 6382}
+{"timestamp": "2026-06-14T16:33:52", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:33:52", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-14T16:33:52", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:33:58", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 5511}
+{"timestamp": "2026-06-14T16:34:05", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:34:05", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 2}
+{"timestamp": "2026-06-14T16:34:13", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:34:18", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 4744}
+{"timestamp": "2026-06-14T16:34:21", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:34:21", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-14T16:34:24", "event": "node_hit", "node": "Branch_Search", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:34:38", "event": "action_fail", "node": "Branch_Search", "action_type": "navigate", "success": false, "duration_ms": 13228}

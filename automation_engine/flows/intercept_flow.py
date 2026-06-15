@@ -291,8 +291,11 @@ class InterceptOrchestrator:
         try:
             from mobile_core.device_optimizer import DeviceOptimizer
             opt = DeviceOptimizer(self.config.device.serial)
+            # 从配置中安全读取是否使用 shizuku 提权
+            use_shizuku = getattr(self.config.risk_control, 'use_shizuku_ip_rotate', False)
             opt.toggle_airplane_mode(
-                delay_seconds=self.config.risk_control.ip_rotate_delay
+                delay_seconds=self.config.risk_control.ip_rotate_delay,
+                use_shizuku=use_shizuku
             )
         except Exception as e:
             logger.error(f"IP rotation failed: {e}")

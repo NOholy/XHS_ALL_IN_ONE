@@ -225,6 +225,25 @@ class AgentConfig:
 
 
 @dataclass
+class PipelineConfig:
+    """Pipeline 引擎配置"""
+    # Pipeline YAML 文件目录
+    pipeline_dir: str = ""               # 空则自动计算
+    # 默认 Pipeline (不指定 --pipeline 时使用)
+    default_pipeline: str = ""           # 如 "intercept_comment"
+    # 执行日志
+    enable_logging: bool = True
+    log_dir: str = ""                    # 空则自动计算
+    save_screenshots: bool = False       # 是否保存每步截图 (调试用)
+    # Watchdog 中间件
+    watchdog_interval_ms: int = 3000     # 弹窗检查间隔 (毫秒)
+    # LoopDetector 中间件
+    max_stuck_count: int = 3             # 连续卡死 N 次后恢复
+    # 执行控制
+    strict_validation: bool = False      # 加载时严格验证 DAG
+
+
+@dataclass
 class EngineConfig:
     """引擎顶层配置"""
     device: DeviceConfig = field(default_factory=DeviceConfig)
@@ -236,6 +255,7 @@ class EngineConfig:
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     ui_elements: UIElementsConfig = field(default_factory=UIElementsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
+    pipeline: PipelineConfig = field(default_factory=PipelineConfig)
 
 
 def _deep_merge(base: dict, override: dict) -> dict:
@@ -299,5 +319,9 @@ def load_config() -> EngineConfig:
         config.vision.templates_dir = os.path.join(base_dir, "..", "data", "ui_templates")
     if not config.intercept.dedup_record_file:
         config.intercept.dedup_record_file = os.path.join(base_dir, "..", "data", "commented_posts.json")
+    if not config.pipeline.pipeline_dir:
+        config.pipeline.pipeline_dir = os.path.join(base_dir, "config", "pipelines")
+    if not config.pipeline.log_dir:
+        config.pipeline.log_dir = os.path.join(base_dir, "..", "data", "pipeline_logs")
 
     return config

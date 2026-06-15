@@ -1,0 +1,2 @@
+{"timestamp": "2026-06-14T16:14:47", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:14:54", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 6652}

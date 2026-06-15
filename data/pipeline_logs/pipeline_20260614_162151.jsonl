@@ -1,0 +1,10 @@
+{"timestamp": "2026-06-14T16:22:04", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:22:10", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 5675}
+{"timestamp": "2026-06-14T16:22:21", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:22:23", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 1637}
+{"timestamp": "2026-06-14T16:22:34", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:22:34", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 2}
+{"timestamp": "2026-06-14T16:22:44", "event": "node_hit", "node": "Branch_EnterPost", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-14T16:22:45", "event": "action_done", "node": "Branch_EnterPost", "action_type": "custom", "success": true, "duration_ms": 1415}
+{"timestamp": "2026-06-14T16:22:58", "event": "node_hit", "node": "Tap_Post", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-14T16:23:01", "event": "action_done", "node": "Tap_Post", "action_type": "tap", "success": true, "duration_ms": 3440}

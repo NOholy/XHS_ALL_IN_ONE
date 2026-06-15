@@ -50,6 +50,14 @@ risk_control:
   human_sleep_sigma: 1.0
   tap_noise_px: 15
 
+stealth:
+  # 传感器模拟（消除触摸-传感器数据反差，防止高级风控检测）
+  sensor_simulation: true           # 总开关
+  sensor_mode: "always_on"          # "off" | "coupled" | "always_on"
+  # "off" = 不模拟传感器数据
+  # "coupled" = 仅在触摸事件期间联动注入
+  # "always_on" = 持续模拟手持微动（推荐，更真实）
+
 farm:
   enabled: true
   session_duration_minutes: 30

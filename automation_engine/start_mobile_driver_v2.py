@@ -1,6 +1,6 @@
 """
 XHS Mobile Driver V2 - Industrial Grade CLI Entry Point
-支持: 真机初始化 | 养号 | 话题截流 | 全自动(养号+截流) | 扫描 | 提取 | 回复
+支持: 真机初始化 | 养号 | 话题截流 | 全自动(养号+截流) | 扫描 | 提取 | 回复 | Pipeline
 
 所有参数均通过 config.yaml + 环境变量配置，CLI仅提供 action 选择和必要覆盖。
 """
@@ -121,28 +121,22 @@ def action_init(config, force=False):
 
 
 def action_farm(config):
-    """养号模式"""
-    components = _build_components(config)
-    from flows.farm_flow import FarmOrchestrator
-    orchestrator = FarmOrchestrator(components["farmer"], config)
-    orchestrator.run()
+    """养号模式 (已迁移至 Pipeline 引擎)"""
+    logger.info("Starting Farm Pipeline...")
+    action_pipeline(config, pipeline_path="farm_session")
 
 
 def action_intercept(config):
-    """话题搜索评论截流"""
-    components = _build_components(config)
-    from flows.intercept_flow import InterceptOrchestrator
-    orchestrator = InterceptOrchestrator(
-        navigator=components["navigator"],
-        searcher=components["searcher"],
-        reader=components["reader"],
-        commenter=components["commenter"],
-        farmer=components["farmer"],
-        driver=components["driver"],
-        watchdog=components["watchdog"],
-        config=config,
-    )
-    orchestrator.run()
+    """话题搜索评论截流 (已迁移至 Pipeline 引擎)"""
+    logger.info("Starting Intercept Pipeline...")
+    keywords = config.intercept.keywords
+    for keyword in keywords:
+        logger.info(f"Intercepting keyword: {keyword}")
+        action_pipeline(
+            config, 
+            pipeline_path="intercept_comment", 
+            context={"current_keyword": keyword}
+        )
 
 
 def _check_active_hours(config) -> bool:
@@ -180,48 +174,24 @@ def action_auto(config):
     elif mode == "farm_then_intercept":
         logger.info(f"Warming up with {config.schedule.warmup_farm_minutes} min farming...")
         # 先养号热身
-        components = _build_components(config)
-        from flows.farm_flow import FarmOrchestrator
-        farm_orch = FarmOrchestrator(components["farmer"], config)
-        farm_orch.run(config.schedule.warmup_farm_minutes)
+        action_pipeline(config, pipeline_path="farm_session")
 
         # 再截流
-        from flows.intercept_flow import InterceptOrchestrator
-        intercept_orch = InterceptOrchestrator(
-            navigator=components["navigator"],
-            searcher=components["searcher"],
-            reader=components["reader"],
-            commenter=components["commenter"],
-            farmer=components["farmer"],
-            driver=components["driver"],
-            watchdog=components["watchdog"],
-            config=config,
-        )
-        intercept_orch.run()
+        action_intercept(config)
+        
     elif mode == "mixed":
         # 交替执行：养号一轮 → 截流一个关键词 → 养号 → ...
-        components = _build_components(config)
-        from flows.intercept_flow import InterceptOrchestrator
-
-        # 保存原始关键词列表，避免修改共享引用
         all_keywords = list(config.intercept.keywords)
         for keyword in all_keywords:
             # 养号热身
-            components["farmer"].run_session(duration_minutes=10)
-            # 截流单个关键词（deepcopy 避免污染原始 config）
-            single_config = copy.deepcopy(config)
-            single_config.intercept.keywords = [keyword]
-            intercept_orch = InterceptOrchestrator(
-                navigator=components["navigator"],
-                searcher=components["searcher"],
-                reader=components["reader"],
-                commenter=components["commenter"],
-                farmer=components["farmer"],
-                driver=components["driver"],
-                watchdog=components["watchdog"],
-                config=single_config,
+            action_pipeline(config, pipeline_path="farm_session")
+            
+            # 截流单个关键词
+            action_pipeline(
+                config, 
+                pipeline_path="intercept_comment", 
+                context={"current_keyword": keyword}
             )
-            intercept_orch.run()
     else:
         logger.error(f"Unknown run_mode: {mode}")
 
@@ -256,6 +226,139 @@ def action_agent(config, prompt):
     print("\n--- AGENT RESULT ---")
     print(result)
     print("--------------------\n")
+
+
+def action_pipeline(config, pipeline_path=None, context=None, override=None, entry=None, report=False):
+    """Pipeline 模式 — YAML 声明式自动化执行"""
+    import os
+    from mobile_core.pipeline.loader import PipelineLoader
+    from mobile_core.pipeline.recognition import RecognitionRegistry
+    from mobile_core.pipeline.actions import ActionRegistry
+    from mobile_core.pipeline.engine import PipelineExecutor
+    from mobile_core.pipeline.middleware import (
+        WatchdogMiddleware, LoopDetectorMiddleware, LoggingMiddleware
+    )
+
+    # 1. 构建所有组件
+    components = _build_components(config)
+
+    # 2. 构建 Pipeline 引擎
+    reco_registry = RecognitionRegistry(
+        vision=components["vision"],
+        ocr=components["ocr"],
+        page_detector=components["page_detector"],
+        config=config,
+    )
+    action_registry = ActionRegistry(
+        driver=components["driver"],
+        navigator=components["navigator"],
+        keyboard_vision=components["keyboard"],
+        config=config,
+    )
+    executor = PipelineExecutor(
+        driver=components["driver"],
+        recognition_registry=reco_registry,
+        action_registry=action_registry,
+        config=config,
+    )
+
+    # 3. 注册中间件
+    executor.add_middleware(
+        WatchdogMiddleware(
+            watchdog=components["watchdog"],
+            check_interval_ms=config.pipeline.watchdog_interval_ms,
+        )
+    )
+
+    from mobile_core.loop_detector import LoopDetector
+    loop_detector = LoopDetector()
+    executor.add_middleware(
+        LoopDetectorMiddleware(
+            loop_detector=loop_detector,
+            max_stuck_count=config.pipeline.max_stuck_count,
+        )
+    )
+
+    if config.pipeline.enable_logging:
+        os.makedirs(config.pipeline.log_dir, exist_ok=True)
+        from datetime import datetime as dt
+        log_file = os.path.join(
+            config.pipeline.log_dir,
+            f"pipeline_{dt.now().strftime('%Y%m%d_%H%M%S')}.jsonl"
+        )
+        executor.add_middleware(
+            LoggingMiddleware(
+                log_file=log_file,
+                save_screenshots=config.pipeline.save_screenshots,
+                screenshot_dir=os.path.join(config.pipeline.log_dir, "screenshots"),
+            )
+        )
+        logger.info(f"Pipeline log: {log_file}")
+
+    # 4. 加载 Pipeline YAML
+    loader = PipelineLoader(strict=config.pipeline.strict_validation)
+
+    if pipeline_path:
+        # 指定了具体 YAML 文件
+        if not os.path.isabs(pipeline_path):
+            # 相对路径: 先查 pipeline_dir, 再查当前目录
+            candidate = os.path.join(config.pipeline.pipeline_dir, pipeline_path)
+            if os.path.exists(candidate):
+                pipeline_path = candidate
+            elif not pipeline_path.endswith(('.yaml', '.yml')):
+                # 尝试添加后缀
+                for ext in ('.yaml', '.yml'):
+                    candidate = os.path.join(config.pipeline.pipeline_dir, pipeline_path + ext)
+                    if os.path.exists(candidate):
+                        pipeline_path = candidate
+                        break
+    else:
+        # 使用默认 Pipeline
+        if config.pipeline.default_pipeline:
+            pipeline_path = os.path.join(
+                config.pipeline.pipeline_dir,
+                config.pipeline.default_pipeline + ".yaml"
+            )
+        else:
+            logger.error("No --pipeline specified and no default_pipeline configured")
+            sys.exit(1)
+
+    if not os.path.exists(pipeline_path):
+        logger.error(f"Pipeline file not found: {pipeline_path}")
+        sys.exit(1)
+
+    logger.info(f"Loading pipeline: {pipeline_path}")
+    pipeline_def = loader.load(pipeline_path)
+
+    # 5. 准备上下文
+    ctx = context or {}
+    ctx["_config"] = config
+
+    # 6. 执行
+    logger.info(f"Executing pipeline '{pipeline_def.name}' with context: {ctx}")
+    stats = executor.run(
+        pipeline=pipeline_def,
+        context=ctx,
+        override=override,
+        entry=entry,
+    )
+
+    if report:
+        try:
+            from mobile_core.pipeline.reporter import HtmlReporter
+            import os
+            
+            report_dir = os.path.join(os.path.dirname(__file__), "data", "pipeline_reports")
+            reporter = HtmlReporter(report_dir)
+            reporter.generate(pipeline_path, stats)
+        except Exception as e:
+            logger.error(f"Failed to generate HTML report: {e}")
+
+    # 7. 输出结果
+    print("\n--- PIPELINE RESULT ---")
+    print(json.dumps(stats.summary(), ensure_ascii=False, indent=2))
+    print("-----------------------\n")
+    return stats
 
 
 
@@ -310,7 +413,7 @@ def parse_args():
     )
     parser.add_argument(
         "--action", required=True,
-        choices=["init", "farm", "intercept", "auto", "scan", "extract", "reply", "agent"],
+        choices=["init", "farm", "intercept", "auto", "scan", "extract", "reply", "agent", "pipeline"],
         help=(
             "init       - 真机一键初始化（关闭动画/采集模板/检测登录）\n"
             "farm       - 自动养号（浏览/点赞/收藏/搜索）\n"
@@ -319,7 +422,8 @@ def parse_args():
             "scan       - 信息流扫描\n"
             "extract    - 提取指定帖子内容\n"
             "reply      - 回复指定坐标\n"
-            "agent      - 启动 LLM Agent 模式"
+            "agent      - 启动 LLM Agent 模式\n"
+            "pipeline   - Pipeline YAML 声明式执行"
         )
     )
     # CLI 覆盖参数（均为可选，不传则使用 config.yaml）
@@ -349,6 +453,18 @@ def parse_args():
     
     # Agent 参数
     parser.add_argument("--prompt", type=str, help="Agent 任务提示词")
+
+    # Pipeline 参数
+    parser.add_argument("--pipeline", type=str,
+                        help="Pipeline YAML 文件路径或名称 (如 intercept_comment)")
+    parser.add_argument("--context", type=str,
+                        help='Pipeline 上下文 JSON (如 \'{"current_keyword": "旅游"}\')')
+    parser.add_argument("--pipeline-override", type=str,
+                        help='Pipeline 节点覆盖 JSON')
+    parser.add_argument("--pipeline-entry", type=str,
+                        help="Pipeline 覆盖入口节点")
+    parser.add_argument("--report", action="store_true",
+                        help="Generate HTML report after pipeline execution (saved to data/pipeline_reports)")
 
     return parser.parse_args()
 
@@ -404,6 +520,26 @@ def main():
                      args.live or config.intercept.live_mode)
     elif args.action == "agent":
         action_agent(config, args.prompt)
+    elif args.action == "pipeline":
+        # 解析 context JSON
+        ctx = None
+        if args.context:
+            try:
+                ctx = json.loads(args.context)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid --context JSON: {e}")
+                sys.exit(1)
+
+        # 解析 override JSON
+        override = None
+        if args.pipeline_override:
+            try:
+                override = json.loads(args.pipeline_override)
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid --pipeline-override JSON: {e}")
+                sys.exit(1)
+
+        action_pipeline(config, args.pipeline, ctx, override)
 
 
 if __name__ == "__main__":

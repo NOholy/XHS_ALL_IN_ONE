@@ -22,3 +22,5 @@ def _ensure_adb_in_path():
             return
 
 _ensure_adb_in_path()
+
+from .stealth_ime_client import StealthIMEClient

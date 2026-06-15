@@ -1,0 +1,156 @@
+name: farm_session
+description: "养号会话流水线，模拟真人浏览、随机点赞收藏评论"
+
+nodes:
+  Navigate_Home:
+    recognition:
+      type: direct_hit
+    action:
+      type: launch_app
+      package: "com.xingin.xhs"
+    next:
+      - Farm_NavigateHome
+
+  Decide_Branch:
+    recognition:
+      type: direct_hit
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.farm_random_branch"
+    next:
+      - Branch_Search
+      - Branch_Profile
+      - Branch_EnterPost
+      - Branch_Browse
+
+  Branch_Search:
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.check_branch"
+      params:
+        expected: "search"
+    action:
+      type: navigate
+      target_page: "search"
+    post_delay: 2000
+    next:
+      - Farm_NavigateHome
+      
+  Branch_Profile:
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.check_branch"
+      params:
+        expected: "profile"
+    action:
+      type: navigate
+      target_page: "profile"
+    post_delay: 3000
+    next:
+      - Farm_NavigateHome
+
+  Branch_Browse:
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.check_branch"
+      params:
+        expected: "browse"
+    action:
+      type: human_swipe
+      direction: "down"
+    post_delay: [1000, 3000]
+    next:
+      - Decide_Branch
+
+  Branch_EnterPost:
+    recognition:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.check_branch"
+      params:
+        expected: "enter_post"
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.farm_extract_anchor"
+    next:
+      - Tap_Post
+
+  Tap_Post:
+    recognition:
+      type: direct_hit
+    action:
+      type: tap
+      target: [300, 900]
+    post_delay: 3000
+    next:
+      - Wait_Detail
+
+  Wait_Detail:
+    recognition:
+      type: direct_hit
+    action:
+      type: do_nothing
+    pre_delay: [1500, 2500]
+    on_error:
+      - Farm_NavigateHome
+    next:
+      - Farm_Read
+
+  Farm_Read:
+    recognition:
+      type: direct_hit
+    action:
+      type: custom
+      handler: "mobile_core.pipeline.handlers.farm.farm_attention_read"
+      params:
+        mu: 5.0
+        sigma: 2.0
+    next:
+      - Try_Like
+
+  Try_Like:
+    probability: 0.1
+    recognition:
+      type: direct_hit
+    action:
+      type: tap
+      target: [540, 900]
+    repeat: 2
+    repeat_delay: 100
+    on_error:
+      - Try_Collect
+    next:
+      - Try_Collect
+      
+  Try_Collect:
+    probability: 0.05
+    recognition:
+      type: direct_hit
+    action:
+      type: tap
+      target: [800, 1800]
+    on_error:
+      - Try_Comment
+    next:
+      - Try_Comment
+      
+  Try_Comment:
+    probability: 0.02
+    recognition:
+      type: direct_hit
+    action:
+      type: tap
+      target: [200, 1800]
+    on_error:
+      - Farm_NavigateHome
+    next:
+      - Farm_NavigateHome
+
+  Farm_NavigateHome:
+    recognition:
+      type: direct_hit
+    action:
+      type: navigate
+      target_page: "home"
+    post_delay: 1500
+    next:
+      - Decide_Branch

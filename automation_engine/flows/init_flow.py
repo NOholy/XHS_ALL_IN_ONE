@@ -1,7 +1,7 @@
 """
 真机一键初始化编排器 (Industrial Grade)
-将 DeviceOptimizer + Minitouch 部署 + Auto-Crop + App检测 + 登录校验串联为完整 Pipeline。
-支持多机型、多分辨率、多 CPU 架构的自动适配。
+将 DeviceOptimizer + TouchInjector 部署 + Auto-Crop + App检测 + 登录校验串联为完整 Pipeline。
+支持多机型、多分辨率的自动适配。
 """
 import subprocess
 import os
@@ -159,12 +159,51 @@ class InitOrchestrator:
         report["steps"]["cleanup_u2"] = "OK"
 
         # ═══════════════════════════════════════════
-        # Step 4: Minitouch 部署（多机型自动适配）
+        # Step 4: TouchInjector 部署
         # ═══════════════════════════════════════════
-        logger.info("[4/10] Deploying minitouch (multi-ABI auto-detection)...")
-        mt_result = self._deploy_minitouch(driver)
-        report["steps"]["minitouch"] = mt_result
+        logger.info("[4/10] Deploying TouchInjector (app_process daemon)...")
+        ti_result = self._deploy_touch_injector(driver)
+        report["steps"]["touch_injector"] = ti_result
 
+        # Step 4.5: Sensor simulation status
+        sensor_status = driver.sensor_status
+        report["steps"]["sensor_simulation"] = f"{sensor_status['strategy']}({('active' if sensor_status['active'] else 'inactive')})"
+        if sensor_status['active']:
+            logger.info(f"[4.5/10] Sensor simulation active: strategy={sensor_status['strategy']}, mode={sensor_status['mode']}")
+        else:
+            # Enforce strict precondition check: if it's supposed to be on but failed, ABORT.
+            if sensor_status['mode'] != 'off':
+                logger.critical(f"[4.5/10] 🚨 CRITICAL: Sensor simulation failed to activate (strategy={sensor_status['strategy']}) while mode is '{sensor_status['mode']}'.")
+                logger.critical("This exposes the automation to severe 'dead sensor' fraud detection vectors.")
+                logger.critical("Aborting initialization to protect account safety. Consider rooting the device or setting mode to 'off'.")
+                raise RuntimeError("Precondition failed: Sensor simulation inactive.")
+            else:
+                logger.warning(f"[4.5/10] ⚠️ Sensor simulation explicitly set to 'off'. Touch-sensor data mismatch risk remains.")
+        # Step 4.6: Stealth IME — 全局激活（仅切换一次，进程退出时自动还原）
+        if hasattr(driver, "_ime_client") and driver._ime_client:
+            logger.info("[4.6/10] Checking Stealth IME installation...")
+            ime_installed = driver._ime_client.check_ime_installed()
+            report["steps"]["stealth_ime"] = "installed" if ime_installed else "not_installed"
+            if not ime_installed:
+                logger.critical("[4.6/10] 🚨 CRITICAL: Stealth IME is NOT installed on the device.")
+                logger.critical("This means the 'Invisible Keyboard' protection is missing, risking severe fraud detection.")
+                logger.critical("Aborting initialization. Please use stealth_ime_client to install it.")
+                raise RuntimeError("Precondition failed: Stealth IME is not installed.")
+            else:
+                # 全局激活：在整个自动化生命周期内保持 Stealth IME 为默认输入法。
+                # ensure_ime_active() 内部会自动：
+                #   1. 记录当前的系统原厂输入法（如搜狗/百度）
+                #   2. 切换为 Stealth IME
+                #   3. 注册 atexit + SIGINT/SIGTERM 钩子，保证进程退出时自动还原
+                ime_activated = driver._ime_client.ensure_ime_active()
+                if ime_activated:
+                    logger.info("[4.6/10] ✅ Stealth IME globally activated. Will auto-restore on process exit.")
+                    report["steps"]["stealth_ime"] = "globally_active"
+                else:
+                    logger.critical("[4.6/10] 🚨 CRITICAL: Stealth IME is installed but failed to activate!")
+                    raise RuntimeError("Precondition failed: Stealth IME activation failed.")
+        else:
+            report["steps"]["stealth_ime"] = "N/A"
         # ═══════════════════════════════════════════
         # Step 5: 关闭动画
         # ═══════════════════════════════════════════
@@ -229,7 +268,8 @@ class InitOrchestrator:
                 report["steps"]["ip_rotation"] = "SKIPPED_IDEMPOTENT"
             else:
                 logger.info("[9/10] Testing IP rotation...")
-                optimizer.toggle_airplane_mode()
+                use_shizuku = getattr(self.config.risk_control, 'use_shizuku_ip_rotate', False) if hasattr(self.config, 'risk_control') else False
+                optimizer.toggle_airplane_mode(use_shizuku=use_shizuku)
                 report["steps"]["ip_rotation"] = "OK"
         else:
             report["steps"]["ip_rotation"] = "SKIPPED"
@@ -384,23 +424,21 @@ class InitOrchestrator:
         except Exception as e:
             logger.debug(f"Failed to check debug overlays: {e}")
 
-    def _deploy_minitouch(self, driver) -> str:
+    def _deploy_touch_injector(self, driver) -> str:
         """
-        检测设备 CPU 架构，自动部署对应的 minitouch 二进制文件。
-        支持所有主流 ABI: arm64-v8a, armeabi-v7a, armeabi, x86_64, x86, mips64, mips
+        部署基于 app_process 的 Java TouchInjector 守护进程。
+        架构无关，直接在 Dalvik/ART 虚拟机上运行。
         """
         try:
-            if hasattr(driver, "ensure_minitouch"):
-                if driver.ensure_minitouch():
-                    abi = driver._get_device_abi()
-                    self._device_abi = abi
-                    return f"OK (ABI: {abi}, minitouch socket connected)"
+            if hasattr(driver, "_ensure_touch_injector"):
+                if driver._ensure_touch_injector():
+                    return "OK (TouchInjector daemon connected)"
                 else:
-                    return "FALLBACK (minitouch unavailable, using adb input tap)"
+                    return "FAILED (TouchInjector unavailable)"
             return "SKIPPED (Not using Agentless Driver)"
         except Exception as e:
-            logger.warning(f"Minitouch deployment failed: {e}")
-            return f"FALLBACK: {e}"
+            logger.warning(f"TouchInjector deployment failed: {e}")
+            return f"FAILED: {e}"
 
     def _check_app_installed(self, adb_prefix, package="com.xingin.xhs") -> bool:
         """检查 XHS App 是否已安装，并记录版本号"""

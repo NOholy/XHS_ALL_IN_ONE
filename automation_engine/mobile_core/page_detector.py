@@ -33,17 +33,15 @@ class LightPageDetector:
         """
         try:
             result = subprocess.run(
-                self.adb_prefix + ["shell", "dumpsys", "activity", "top"],
+                self.adb_prefix + ["shell", "dumpsys", "window", "windows"],
                 capture_output=True, text=True, timeout=3
             )
-            # 输出中搜索 ACTIVITY 行
-            for line in result.stdout.strip().split('\n'):
-                stripped = line.strip()
-                if 'ACTIVITY' in stripped and '/' in stripped:
-                    parts = stripped.split()
-                    for part in parts:
-                        if '/' in part and '.' in part:
-                            return part
+            for line in result.stdout.split('\n'):
+                if 'mCurrentFocus' in line or 'mFocusedApp' in line:
+                    import re
+                    m = re.search(r'([a-zA-Z0-9\._]+/[a-zA-Z0-9\._]+)', line)
+                    if m:
+                        return m.group(1)
         except Exception as e:
             logger.debug(f"get_current_activity failed: {e}")
         return ""
@@ -100,7 +98,7 @@ class LightPageDetector:
 
         # XHS Activity 映射（基于 v9.x 版本，可能需要随版本更新）
         activity_lower = activity.lower()
-        if any(k in activity_lower for k in ["index", "main", "home", "splash"]):
+        if any(k in activity_lower for k in ["main", "home", "splash"]):
             return "home_feed"
         elif any(k in activity_lower for k in ["searchresult", "search_result"]):
             return "search_results"

@@ -109,38 +109,76 @@ class DeviceOptimizer:
             logger.warning(f"IP detection failed: {e}")
         return "unknown", "unknown"
 
-    def toggle_airplane_mode(self, delay_seconds=5):
+    def _execute_shell(self, *cmd_args, **kwargs):
+        """
+        统一的 shell 执行包装器。
+        支持 PC 端 adb shell，或者手机端本地通过 Shizuku (rish) 提权执行。
+        """
+        use_shizuku = getattr(self, 'use_shizuku', False)
+        if use_shizuku:
+            # 本地运行环境，使用 rish -c 执行
+            cmd_str = " ".join(cmd_args)
+            return subprocess.run(["rish", "-c", cmd_str], **kwargs)
+        else:
+            # PC 端运行环境，使用 adb shell 执行
+            return subprocess.run(self.adb_prefix + ["shell"] + list(cmd_args), **kwargs)
+
+    def toggle_airplane_mode(self, delay_seconds=5, use_shizuku=False):
         """
         开关飞行模式，用于重置 4G/5G 网络的公网 IP。
-        增加 IP 验证和随机化延迟。
+        支持 Android 12 的 cmd connectivity 接口，并兼容 Shizuku (rish) 提权执行。
         """
         import random
+        # 动态设置此次执行是否使用 shizuku
+        if use_shizuku and not hasattr(self, 'use_shizuku'):
+            self.use_shizuku = True
+            
         jitter_delay = delay_seconds + random.uniform(1.0, 5.0)
-        logger.info(f"Toggling airplane mode for IP rotation (delay {jitter_delay:.1f}s)...")
+        env_msg = "Shizuku (rish)" if getattr(self, 'use_shizuku', False) else "PC ADB"
+        logger.info(f"Toggling airplane mode via {env_msg} (delay {jitter_delay:.1f}s)...")
         
         old_ip, old_net = self._get_ip()
         logger.info(f"Current IP: {old_ip} ({old_net})")
 
-        # 打开快速设置面板
-        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "expand-settings"], timeout=10)
+        # 1. 打开快速设置面板 (用于伪装给系统看)
+        try:
+            self._execute_shell("cmd", "statusbar", "expand-settings", timeout=10)
+        except Exception as e:
+            logger.debug(f"Failed to expand statusbar: {e}")
+        
         time.sleep(1)
         
-        # 检查是否成功执行了 svc（需要 Root）
-        res_data = subprocess.run(self.adb_prefix + ["shell", "svc", "data", "disable"], capture_output=True, text=True, timeout=10)
-        res_wifi = subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "disable"], capture_output=True, text=True, timeout=10)
-        
-        if "Killed" in res_data.stderr or "Permission denied" in res_data.stderr:
-            logger.error("Failed to disable data via 'svc' command. It requires Root on Android 10+. "
-                         "Please use visual UI interaction or Magisk module to perform IP rotation.")
+        # 2. 断开网络
+        # 优先尝试 Android 12+ 更有效的飞行模式接口
+        try:
+            res_ap = self._execute_shell("cmd", "connectivity", "airplane-mode", "enable", capture_output=True, text=True, timeout=10)
+            
+            # 同时下发 svc 命令作为兜底
+            res_data = self._execute_shell("svc", "data", "disable", capture_output=True, text=True, timeout=10)
+            self._execute_shell("svc", "wifi", "disable", capture_output=True, text=True, timeout=10)
+            
+            # 错误分析日志
+            if res_ap and res_ap.stderr and ("SecurityException" in res_ap.stderr or "not found" in res_ap.stderr):
+                logger.debug(f"cmd connectivity fallback: {res_ap.stderr.strip()}")
+            if res_data and res_data.stderr and ("Killed" in res_data.stderr or "Permission denied" in res_data.stderr):
+                logger.warning("svc command failed due to missing Root/Shell permissions.")
+                if not getattr(self, 'use_shizuku', False):
+                    logger.error("You are on Android 12 without Shizuku local execution enabled. IP rotation might fail.")
+        except Exception as e:
+            logger.error(f"Error executing shell commands to disable network: {e}")
         
         logger.info(f"Network OFF. Waiting {jitter_delay:.1f}s for connection drop...")
         time.sleep(jitter_delay)
         
+        # 3. 恢复网络
         logger.info("Enabling Cellular Data and WiFi...")
-        subprocess.run(self.adb_prefix + ["shell", "svc", "data", "enable"], timeout=10)
-        subprocess.run(self.adb_prefix + ["shell", "svc", "wifi", "enable"], timeout=10)
-        
-        subprocess.run(self.adb_prefix + ["shell", "cmd", "statusbar", "collapse"], timeout=10)
+        try:
+            self._execute_shell("cmd", "connectivity", "airplane-mode", "disable", timeout=10)
+            self._execute_shell("svc", "data", "enable", timeout=10)
+            self._execute_shell("svc", "wifi", "enable", timeout=10)
+            self._execute_shell("cmd", "statusbar", "collapse", timeout=10)
+        except Exception as e:
+            logger.error(f"Error executing shell commands to enable network: {e}")
         
         logger.info("Network ON. Waiting for IP allocation...")
         
