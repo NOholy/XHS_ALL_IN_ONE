@@ -282,7 +282,7 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
     import subprocess
     adb_cmd = ["adb"] if not serial else ["adb", "-s", serial]
     
-    from mobile_core.navigator import Navigator
+    from mobile_core.navigator import XHSNavigator
     from mobile_core.watchdog import PopupWatchdog
     from mobile_core.config import Config
     from mobile_core.vision import VisionEngine
@@ -290,7 +290,7 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
     config = Config.load()
     base_templates_dir = os.path.join(os.path.dirname(__file__), "..", "data", "ui_templates", serial or _auto_detect_serial())
     vision = VisionEngine(base_templates_dir)
-    navigator = Navigator(driver, vision, ocr_client, config)
+    navigator = XHSNavigator(driver, vision, ocr_client, config)
     if watchdog is None:
         watchdog = PopupWatchdog(driver, vision, ocr_client, config)
     
@@ -298,11 +298,14 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
     subprocess.run(adb_cmd + ["shell", "am", "force-stop", "com.xingin.xhs"], timeout=10)
     time.sleep(2)
     
-    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_HOME"], timeout=10)
+    if hasattr(driver, 'inject_keyevent'):
+        driver.inject_keyevent(3)  # KEYCODE_HOME via 触控注入 tunnel
+    else:
+        subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_HOME"], timeout=10)
     time.sleep(1)
     
-    # Launch app
-    subprocess.run(adb_cmd + ["shell", "monkey", "-p", "com.xingin.xhs", "-c", "android.intent.category.LAUNCHER", "1"], timeout=10)
+    # Launch app via monkey to avoid mLaunchSource=Shell trace
+    subprocess.run(adb_cmd + ["shell", "monkey", "-p", "com.xingin.xhs", "-c", "android.intent.category.LAUNCHER", "1"], capture_output=True, timeout=10)
     driver.human_sleep(5.0) 
     
     # Wait until app is truly loaded (OCR sees '推荐' or '发现' or '首页')
@@ -456,7 +459,10 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
                 img_kb = driver.clean_screenshot()
                 if ocr_client.find_text(img_kb, "发送", conf_threshold=0.6) or ocr_client.find_text(img_kb, "发布", conf_threshold=0.6):
                     logger.info("Keyboard opened successfully. Typing text to reveal send button...")
-                    subprocess.run(adb_cmd + ["shell", "input", "text", "hello"], timeout=10)
+                    if hasattr(driver, 'type_text'):
+                        driver.type_text("hello", human_like=False)
+                    else:
+                        subprocess.run(adb_cmd + ["shell", "input", "text", "hello"], timeout=10)
                     driver.human_sleep(2.0)
     
                     # Phase D: Send Button (非破坏性交叉校验，绝不真的点击发送)
@@ -468,9 +474,12 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
                     
                     # 清除已输入的文字，绝不留下痕迹
                     logger.info("Clearing typed text to avoid accidental send...")
-                    subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_MOVE_END"], timeout=10)
-                    for _ in range(10):
-                        subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_DEL"], timeout=10)
+                    if hasattr(driver, 'clear_input'):
+                        driver.clear_input()
+                    else:
+                        subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_MOVE_END"], timeout=10)
+                        for _ in range(10):
+                            subprocess.run(adb_cmd + ["shell", "input", "keyevent", "KEYCODE_DEL"], timeout=10)
                 else:
                     logger.warning("Keyboard did not open. Aborting send_button harvest for this post.")
                 

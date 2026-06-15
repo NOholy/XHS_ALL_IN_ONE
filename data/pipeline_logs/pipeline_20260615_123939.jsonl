@@ -1,0 +1,18 @@
+{"timestamp": "2026-06-15T12:39:42", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:39:50", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 7960}
+{"timestamp": "2026-06-15T12:40:02", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:40:12", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 10109}
+{"timestamp": "2026-06-15T12:40:19", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:40:19", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 5}
+{"timestamp": "2026-06-15T12:40:25", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T12:40:31", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 5803}
+{"timestamp": "2026-06-15T12:40:39", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:40:39", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T12:40:47", "event": "node_hit", "node": "Branch_EnterPost", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T12:40:49", "event": "action_done", "node": "Branch_EnterPost", "action_type": "custom", "success": true, "duration_ms": 2047}
+{"timestamp": "2026-06-15T12:40:56", "event": "node_hit", "node": "Tap_Post", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:41:00", "event": "action_done", "node": "Tap_Post", "action_type": "tap", "success": true, "duration_ms": 3227}
+{"timestamp": "2026-06-15T12:41:04", "event": "node_hit", "node": "Wait_Detail", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:41:06", "event": "action_done", "node": "Wait_Detail", "action_type": "do_nothing", "success": true, "duration_ms": 1864}
+{"timestamp": "2026-06-15T12:41:10", "event": "node_hit", "node": "Farm_Read", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T12:41:14", "event": "action_fail", "node": "Farm_Read", "action_type": "custom", "success": false, "duration_ms": 3573}

@@ -13,11 +13,11 @@ class DeviceOptimizer:
         关闭安卓系统的所有过渡动画。
         极大提升 OCR 和视觉匹配的准确率，防止截取到半透明的动画中间态。
         """
-        logger.info("Disabling Android system animations for robust vision matching...")
+        logger.info("Reducing Android animation scales to 0.5 (W5: avoid full-disable fingerprint)...")
         settings = [
-            ("window_animation_scale", "0.0"),
-            ("transition_animation_scale", "0.0"),
-            ("animator_duration_scale", "0.0")
+            ("window_animation_scale", "0.5"),
+            ("transition_animation_scale", "0.5"),
+            ("animator_duration_scale", "0.5")
         ]
         for key, val in settings:
             res = subprocess.run(self.adb_prefix + ["shell", "settings", "put", "global", key, val], capture_output=True, text=True, timeout=10)
@@ -195,6 +195,55 @@ class DeviceOptimizer:
             logger.warning("⚠️ Network not recovered yet. IP unknown.")
         else:
             logger.info(f"✅ IP rotated: {old_ip} → {new_ip} ({new_net})")
+
+    def rotate_ip_stealthy(self, delay_seconds=5, use_shizuku=False):
+        """
+        W1: 隐蔽 IP 轮换 — 仅断开/重连蜂窝数据，不触发飞行模式广播。
+        App 无法通过 ACTION_AIRPLANE_MODE_CHANGED 监听到此操作。
+        比 toggle_airplane_mode 更安全，但仅限蜂窝网络。
+        """
+        import random
+        if use_shizuku and not hasattr(self, 'use_shizuku'):
+            self.use_shizuku = True
+
+        jitter_delay = delay_seconds + random.uniform(2.0, 8.0)
+        env_msg = "Shizuku" if getattr(self, 'use_shizuku', False) else "ADB"
+        logger.info(f"W1: Stealthy IP rotation via {env_msg} (delay {jitter_delay:.1f}s)")
+
+        old_ip, old_net = self._get_ip()
+        logger.info(f"Current IP: {old_ip} ({old_net})")
+
+        # 仅断开蜂窝数据 (不触发飞行模式广播)
+        try:
+            self._execute_shell("svc", "data", "disable", capture_output=True, text=True, timeout=10)
+        except Exception as e:
+            logger.warning(f"svc data disable failed, falling back to airplane mode: {e}")
+            return self.toggle_airplane_mode(delay_seconds, use_shizuku)
+
+        logger.info(f"Cellular data OFF. Waiting {jitter_delay:.1f}s...")
+        time.sleep(jitter_delay)
+
+        # 重连
+        try:
+            self._execute_shell("svc", "data", "enable", capture_output=True, text=True, timeout=10)
+        except Exception as e:
+            logger.error(f"svc data enable failed: {e}")
+
+        logger.info("Cellular data ON. Waiting for IP allocation...")
+        for attempt in range(15):
+            time.sleep(2)
+            new_ip, new_net = self._get_ip()
+            if new_ip != "unknown" and new_ip != old_ip:
+                break
+
+        if old_ip != "unknown" and old_ip == new_ip:
+            logger.warning(f"⚠️ Stealthy rotation failed (IP unchanged: {new_ip}). Falling back to airplane mode.")
+            return self.toggle_airplane_mode(delay_seconds, use_shizuku)
+        elif new_ip == "unknown":
+            logger.warning("⚠️ Network not recovered. Falling back to airplane mode.")
+            return self.toggle_airplane_mode(delay_seconds, use_shizuku)
+        else:
+            logger.info(f"✅ Stealthy IP rotated: {old_ip} → {new_ip} ({new_net})")
 
     def keep_screen_on(self):
         """

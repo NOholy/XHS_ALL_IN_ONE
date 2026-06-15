@@ -36,7 +36,7 @@ class CircuitBreaker:
         if self.state == self.STATE_OPEN:
             # 冷却时间到了，转为半开状态，允许一次探测
             if time.time() - self.last_failure_time >= self.cooldown_seconds:
-                logger.info("Circuit breaker transitioning to HALF_OPEN (probe)")
+                logger.info("熔断器切换至 HALF_OPEN 状态 (探测)")
                 self.state = self.STATE_HALF_OPEN
                 return True
             return False
@@ -46,7 +46,7 @@ class CircuitBreaker:
     def record_success(self):
         """记录成功，重置状态"""
         if self.state != self.STATE_CLOSED:
-            logger.info(f"Circuit breaker recovered: {self.state} → CLOSED")
+            logger.info(f"熔断器已恢复: {self.state} → CLOSED")
         self.consecutive_failures = 0
         self.state = self.STATE_CLOSED
 
@@ -57,12 +57,12 @@ class CircuitBreaker:
 
         if self.state == self.STATE_HALF_OPEN:
             # 半开探测失败，重新打开熔断器
-            logger.warning("Circuit breaker probe failed, re-opening")
+            logger.warning("熔断器探测失败，重新打开")
             self.state = self.STATE_OPEN
         elif self.consecutive_failures >= self.failure_threshold:
             logger.error(
-                f"Circuit breaker OPEN after {self.consecutive_failures} consecutive failures. "
-                f"Cooldown: {self.cooldown_seconds}s"
+                f"连续失败 {self.consecutive_failures} 次，熔断器打开。"
+                f"冷却时间: {self.cooldown_seconds}s"
             )
             self.state = self.STATE_OPEN
 
@@ -83,10 +83,9 @@ class OCRClient:
         """Send an OpenCV image numpy array to the OCR microservice."""
         # 熔断器检查
         if not self._breaker.allow_request():
-            raise OCRServiceError(
-                f"OCR circuit breaker OPEN — service unavailable. "
-                f"Will retry after cooldown ({self._breaker.cooldown_seconds}s)."
-            )
+            logger.critical("OCR 熔断器处于打开状态 — 服务不可用。自动终止脚本。")
+            import os
+            os._exit(1)
 
         try:
             # Resize image if it's too large to dramatically speed up CPU OCR
@@ -122,12 +121,16 @@ class OCRClient:
                 return results
             else:
                 self._breaker.record_failure()
-                raise OCRServiceError(f"OCR Server returned error: {data.get('message')}")
+                raise OCRServiceError(f"OCR 服务端返回错误: {data.get('message')}")
         except requests.RequestException as e:
             self._breaker.record_failure()
-            logger.error("OCR API request failed", extra={"error": str(e)})
+            logger.error("OCR API 请求失败", extra={"error": str(e)})
+            if isinstance(e, requests.exceptions.ConnectionError):
+                logger.critical("OCR 服务不在线 (Connection Error)。自动终止脚本。")
+                import os
+                os._exit(1)
             # Raise exception rather than returning [] so watchdog knows OCR is DOWN, not screen is empty
-            raise OCRServiceError(f"OCR Request Exception: {e}")
+            raise OCRServiceError(f"OCR 请求异常: {e}")
 
     @staticmethod
     def safe_parse_results(results):

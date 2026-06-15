@@ -18,9 +18,9 @@ class FarmOrchestrator:
     def run(self, duration_minutes: int = None):
         """执行养号会话"""
         if not self.config.farm.enabled:
-            logger.info("Farm mode disabled in config. Skipping.")
+            logger.info("配置中未启用养号模式。跳过。")
             return
 
         duration = duration_minutes or self.config.farm.session_duration_minutes
-        logger.info(f"Starting farm session ({duration} min)")
+        logger.info(f"开始养号会话 ({duration} 分钟)")
         self.farmer.run_session(duration)

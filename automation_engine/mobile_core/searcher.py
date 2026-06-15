@@ -61,8 +61,8 @@ class XHSSearcher:
         # 3. 输入关键词
         logger.info(f"Typing keyword: '{keyword}'")
         if self.config.device.typing_mode == "clipboard":
-            import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", keyword], timeout=10)
+            # Stealth IME: fast input for search (no human delay needed)
+            self.driver.type_text(keyword, human_like=False)
         else:
             self.keyboard.type_chinese(keyword)
 
@@ -146,13 +146,14 @@ class XHSSearcher:
             self.driver.physical_tap(rightmost['x'], rightmost['y'])
             return
 
-        # Fallback: 发送回车键事件
-        logger.info("Fallback: sending Enter key to submit search")
-        if hasattr(self.driver, 'adb_prefix'):
-            import subprocess
-            subprocess.run(self.driver.adb_prefix + ["shell", "input", "keyevent", "66"], timeout=5)
+        # Fallback: 通过 Stealth IME EditorAction 或 注入隧道发送回车键
+        logger.info("Fallback: sending Enter/Search via stealth channel")
+        if hasattr(self.driver, 'ime_client') and self.driver.ime_client:
+            self.driver.ime_client.send_editor_action(3)  # IME_ACTION_SEARCH
+        elif hasattr(self.driver, 'inject_keyevent'):
+            self.driver.inject_keyevent(66)
         else:
-            logger.warning("No search button found. Skipping search submission.")
+            logger.warning("No search button found and no stealth input channel available. Skipping search submission.")
 
     def _extract_search_results(self) -> list:
         """OCR 提取当前屏幕上的搜索结果帖子列表"""

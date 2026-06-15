@@ -2,7 +2,7 @@
 # Stealth IME ProGuard Rules
 # ============================================================
 # 保留 InputMethodService 子类（Android 系统通过反射加载）
--keep public class com.android.inputservice.core.StealthIME {
+-keep public class com.android.inputservice.settings.StealthIME {
     public *;
     protected *;
 }

@@ -10,6 +10,7 @@ import sys
 import os
 import json
 from datetime import datetime
+import threading
 
 # 确保 automation_engine 为 Python 路径
 sys.path.insert(0, os.path.dirname(__file__))
@@ -22,12 +23,8 @@ logger = get_logger("main")
 
 def _build_driver(config):
     """根据配置构建设备驱动"""
-    if config.device.use_agentless:
-        from mobile_core.agentless_driver import AgentlessMinitouchDriver
-        return AgentlessMinitouchDriver(config.device.serial)
-    else:
-        from mobile_core.device_driver import DeviceDriver
-        return DeviceDriver(config.device.serial)
+    from mobile_core.agentless_driver import AgentlessMinitouchDriver
+    return AgentlessMinitouchDriver(config.device.serial)
 
 
 def _build_components(config):
@@ -442,6 +439,7 @@ def parse_args():
                                  "farm_only", "mixed"],
                         help="覆盖 auto 模式的运行策略")
     parser.add_argument("--farm-duration", type=int, help="覆盖养号时长(分钟)")
+    parser.add_argument("--max-runtime", type=int, help="脚本最大运行时间(分钟)，超时将自动强制关闭")
     
     # 传统参数（extract/reply 专用）
     parser.add_argument("--force", action="store_true", default=False,
@@ -471,6 +469,16 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    if args.max_runtime:
+        def timeout_handler():
+            from mobile_core.logger import get_logger
+            log = get_logger("watchdog")
+            log.critical(f"⏳ 脚本已运行超过最大时间限制 ({args.max_runtime} 分钟)，强制终止进程。")
+            os._exit(1)
+        timer = threading.Timer(args.max_runtime * 60, timeout_handler)
+        timer.daemon = True
+        timer.start()
 
     # 加载配置
     config = load_config()

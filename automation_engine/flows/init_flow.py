@@ -1,6 +1,6 @@
 """
 真机一键初始化编排器 (Industrial Grade)
-将 DeviceOptimizer + TouchInjector 部署 + Auto-Crop + App检测 + 登录校验串联为完整 Pipeline。
+将 DeviceOptimizer + 触控注入 部署 + Auto-Crop + App检测 + 登录校验串联为完整 Pipeline。
 支持多机型、多分辨率的自动适配。
 """
 import subprocess
@@ -74,12 +74,8 @@ class InitOrchestrator:
         from mobile_core.ocr_client import OCRClient
         from mobile_core.watchdog import PopupWatchdog
 
-        if self.config.device.use_agentless:
-            from mobile_core.agentless_driver import AgentlessMinitouchDriver
-            driver = AgentlessMinitouchDriver(serial)
-        else:
-            from mobile_core.device_driver import DeviceDriver
-            driver = DeviceDriver(serial)
+        from mobile_core.agentless_driver import AgentlessMinitouchDriver
+        driver = AgentlessMinitouchDriver(serial)
 
         ocr = OCRClient(self.config.ocr.endpoint)
         vision = VisionEngine(self.config.vision.templates_dir)
@@ -153,32 +149,44 @@ class InitOrchestrator:
         # ═══════════════════════════════════════════
         # Step 3: 清理历史 U2 自动化残留
         # ═══════════════════════════════════════════
-        logger.info("[3/10] Cleaning up legacy u2 agent residue...")
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.adbkeyboard"], capture_output=True, timeout=10)
         subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.github.nicekeyboard"], capture_output=True, timeout=10)
+        # W3: 自动卸载旧版的 Stealth IME (V2)
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.inputservice.core"], capture_output=True, timeout=10)
         subprocess.run(adb_prefix + ["shell", "rm", "-f", "/data/local/tmp/u2.jar"], capture_output=True, timeout=10)
         report["steps"]["cleanup_u2"] = "OK"
 
         # ═══════════════════════════════════════════
-        # Step 4: TouchInjector 部署
+        # Step 4: 触控注入 部署
         # ═══════════════════════════════════════════
-        logger.info("[4/10] Deploying TouchInjector (app_process daemon)...")
+        logger.info("[4/10] Deploying 触控注入 (app_process daemon)...")
         ti_result = self._deploy_touch_injector(driver)
         report["steps"]["touch_injector"] = ti_result
 
-        # Step 4.5: Sensor simulation status
+        # Step 4.5: Sensor simulation status (read mode from config)
+        config_sensor_mode = getattr(self.config.device, 'sensor_mode', 'always_on')
+        config_sensor_strict = getattr(self.config.device, 'sensor_strict', True)
+
+        # Apply config sensor_mode to driver if not already set
+        if hasattr(driver, 'set_sensor_mode'):
+            driver.set_sensor_mode(config_sensor_mode)
+
         sensor_status = driver.sensor_status
         report["steps"]["sensor_simulation"] = f"{sensor_status['strategy']}({('active' if sensor_status['active'] else 'inactive')})"
         if sensor_status['active']:
-            logger.info(f"[4.5/10] Sensor simulation active: strategy={sensor_status['strategy']}, mode={sensor_status['mode']}")
+            logger.info(f"[4.5/10] Sensor simulation active: strategy={sensor_status['strategy']}, mode={config_sensor_mode}")
         else:
             # Enforce strict precondition check: if it's supposed to be on but failed, ABORT.
-            if sensor_status['mode'] != 'off':
-                logger.critical(f"[4.5/10] 🚨 CRITICAL: Sensor simulation failed to activate (strategy={sensor_status['strategy']}) while mode is '{sensor_status['mode']}'.")
+            if config_sensor_mode != 'off':
+                logger.critical(f"[4.5/10] 🚨 CRITICAL: Sensor simulation failed to activate (strategy={sensor_status['strategy']}) while mode is '{config_sensor_mode}'.")
                 logger.critical("This exposes the automation to severe 'dead sensor' fraud detection vectors.")
-                logger.critical("Aborting initialization to protect account safety. Consider rooting the device or setting mode to 'off'.")
-                raise RuntimeError("Precondition failed: Sensor simulation inactive.")
+                if config_sensor_strict:
+                    logger.critical("Aborting initialization (sensor_strict=True). Set sensor_strict=False in config to bypass.")
+                    raise RuntimeError("Precondition failed: Sensor simulation inactive.")
+                else:
+                    logger.warning("[4.5/10] ⚠️ sensor_strict=False — Continuing despite sensor failure. RISK: Touch-sensor mismatch detection active.")
             else:
-                logger.warning(f"[4.5/10] ⚠️ Sensor simulation explicitly set to 'off'. Touch-sensor data mismatch risk remains.")
+                logger.warning(f"[4.5/10] ⚠️ Sensor simulation explicitly set to 'off' in config. Touch-sensor data mismatch risk remains.")
         # Step 4.6: Stealth IME — 全局激活（仅切换一次，进程退出时自动还原）
         if hasattr(driver, "_ime_client") and driver._ime_client:
             logger.info("[4.6/10] Checking Stealth IME installation...")
@@ -199,6 +207,12 @@ class InitOrchestrator:
                 if ime_activated:
                     logger.info("[4.6/10] ✅ Stealth IME globally activated. Will auto-restore on process exit.")
                     report["steps"]["stealth_ime"] = "globally_active"
+                    # W10: 清除 logcat 中的 InputMethodManagerService 痕迹
+                    subprocess.run(
+                        adb_prefix + ["logcat", "-c"],
+                        capture_output=True, timeout=5
+                    )
+                    logger.info("[W10] Logcat buffer cleared after IME activation.")
                 else:
                     logger.critical("[4.6/10] 🚨 CRITICAL: Stealth IME is installed but failed to activate!")
                     raise RuntimeError("Precondition failed: Stealth IME activation failed.")
@@ -426,18 +440,18 @@ class InitOrchestrator:
 
     def _deploy_touch_injector(self, driver) -> str:
         """
-        部署基于 app_process 的 Java TouchInjector 守护进程。
+        部署基于 app_process 的 Java 触控注入 守护进程。
         架构无关，直接在 Dalvik/ART 虚拟机上运行。
         """
         try:
             if hasattr(driver, "_ensure_touch_injector"):
                 if driver._ensure_touch_injector():
-                    return "OK (TouchInjector daemon connected)"
+                    return "OK (触控注入 daemon connected)"
                 else:
-                    return "FAILED (TouchInjector unavailable)"
+                    return "FAILED (触控注入 unavailable)"
             return "SKIPPED (Not using Agentless Driver)"
         except Exception as e:
-            logger.warning(f"TouchInjector deployment failed: {e}")
+            logger.warning(f"触控注入 deployment failed: {e}")
             return f"FAILED: {e}"
 
     def _check_app_installed(self, adb_prefix, package="com.xingin.xhs") -> bool:

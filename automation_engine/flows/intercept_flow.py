@@ -63,6 +63,8 @@ class InterceptOrchestrator:
 
         total_comments = 0
         comment_since_ip_rotate = 0
+        # W1: 随机化 IP 轮换阈值, 避免精确周期性模式
+        ip_rotate_threshold = random.randint(2, 6)
 
         try:
             for keyword in keywords:
@@ -204,11 +206,20 @@ class InterceptOrchestrator:
                             # 浏览后回到搜索页，准备下一个帖子
                             self.searcher.search_keyword(keyword)
 
-                    # 4g. 概率性 IP 轮换
-                    if comment_since_ip_rotate >= self.config.risk_control.ip_rotate_every_n_comments:
-                        logger.info("Rotating IP after N comments...")
+                    # 4g. W1: 非精确对齐的 IP 轮换
+                    if comment_since_ip_rotate >= ip_rotate_threshold:
+                        # W1: 延迟 30-120 秒, 切断「评论→立即轮换」的因果关联
+                        import time
+                        pre_delay = random.uniform(30, 120)
+                        logger.info(f"IP rotation pre-delay: {pre_delay:.0f}s (threshold was {ip_rotate_threshold})")
+                        time.sleep(pre_delay)
+                        # W1: 轮换前穿插非评论操作
+                        self._camouflage_browse(random.randint(1, 3))
                         self._rotate_ip()
                         comment_since_ip_rotate = 0
+                        # W1: 每次轮换后重新随机化阈值
+                        ip_rotate_threshold = random.randint(2, 6)
+                        logger.info(f"Next IP rotation after {ip_rotate_threshold} comments")
 
                 # 关键词处理完毕，回首页
                 self.navigator.go_home()
@@ -287,13 +298,13 @@ class InterceptOrchestrator:
         return None
 
     def _rotate_ip(self):
-        """执行 IP 轮换"""
+        """执行 IP 轮换 (W1: 优先使用隐蔽模式, 不触发飞行模式广播)"""
         try:
             from mobile_core.device_optimizer import DeviceOptimizer
             opt = DeviceOptimizer(self.config.device.serial)
-            # 从配置中安全读取是否使用 shizuku 提权
             use_shizuku = getattr(self.config.risk_control, 'use_shizuku_ip_rotate', False)
-            opt.toggle_airplane_mode(
+            # W1: 优先使用 svc data 隐蔽轮换, 失败时自动回退到飞行模式
+            opt.rotate_ip_stealthy(
                 delay_seconds=self.config.risk_control.ip_rotate_delay,
                 use_shizuku=use_shizuku
             )

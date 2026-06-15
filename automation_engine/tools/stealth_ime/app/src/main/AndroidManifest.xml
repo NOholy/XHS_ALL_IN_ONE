@@ -20,19 +20,7 @@
                 android:resource="@xml/method" />
         </service>
 
-        <!-- 静态注册 + 显式广播（-n 组件名）= 兼容所有 Android 版本 -->
-        <receiver
-            android:name=".StealthReceiver"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.android.input.COMMIT" />
-                <action android:name="com.android.input.SYNC" />
-                <action android:name="com.android.input.EVENT" />
-                <action android:name="com.android.input.CLEAR" />
-                <action android:name="com.android.input.REPLACE" />
-                <action android:name="com.android.input.EDITOR" />
-            </intent-filter>
-        </receiver>
+        <!-- Socket 通信: 不再需要静态注册 Receiver (消除 PackageManager 指纹) -->
 
     </application>
 

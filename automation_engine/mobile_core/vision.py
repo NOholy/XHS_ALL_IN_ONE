@@ -105,8 +105,12 @@ class VisionEngine:
         return err
 
     def detect_cards_waterfall(self, screen_img):
-        """Dynamically detect feed cards using edge detection and contour logic."""
-        # This replaces the hardcoded grid with dynamic contour detection
+        """Dynamically detect feed cards using edge detection and contour logic.
+        
+        Returns a list of detected card regions ONLY if a dual-column waterfall
+        layout is confirmed (at least 2 cards side-by-side). This prevents
+        false positives from full-screen video frames or single large regions.
+        """
         gray = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         edges = cv2.Canny(blur, 50, 150)
@@ -120,13 +124,29 @@ class VisionEngine:
         cards = []
         h_screen, w_screen = screen_img.shape[:2]
         min_area = (w_screen * 0.3) * (h_screen * 0.1) # At least 30% width, 10% height
+        max_width = w_screen * 0.65  # 单张卡片不应超过屏幕宽度 65%（全屏视频会占满）
         
         for idx, cnt in enumerate(contours):
             x, y, w, h = cv2.boundingRect(cnt)
             area = w * h
-            if area > min_area:
+            if area > min_area and w < max_width:
                 cards.append({"id": idx, "x": x + w//2, "y": y + h//2, "w": w, "h": h})
                 
         # Sort top to bottom, then left to right
         cards.sort(key=lambda c: (c['y'] // 100, c['x']))
-        return cards
+        
+        # 双列验证：必须存在至少一对"同一行、不同列"的卡片
+        # 这是瀑布流 vs 全屏视频的最核心区别
+        if len(cards) >= 2:
+            for i in range(len(cards)):
+                for j in range(i + 1, len(cards)):
+                    # 同一行：Y 坐标差小于屏幕高度 15%
+                    # 不同列：X 坐标差大于屏幕宽度 20%
+                    dy = abs(cards[i]['y'] - cards[j]['y'])
+                    dx = abs(cards[i]['x'] - cards[j]['x'])
+                    if dy < h_screen * 0.15 and dx > w_screen * 0.2:
+                        return cards
+            # 找到了卡片但无法确认双列布局 → 可能是全屏视频
+            return []
+        
+        return []

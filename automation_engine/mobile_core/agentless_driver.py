@@ -1,6 +1,6 @@
 """
 Phase 3: Agentless Driver — Industrial Grade
-Replaces minitouch/uiautomator2 with app_process TouchInjector.
+Replaces minitouch/uiautomator2 with app_process 触控注入.
 Leaves ZERO test agents on the Android device.
 Uses 'app_process' for high-speed, undetectable touch emulation,
 and 'adb exec-out screencap' for vision.
@@ -14,7 +14,7 @@ import cv2
 import os
 from .logger import get_logger
 
-class TouchInjectorError(Exception):
+class InjectorError(Exception):
     pass
 
 class PreconditionError(Exception):
@@ -23,14 +23,17 @@ class PreconditionError(Exception):
 logger = get_logger("agentless_driver")
 
 # Touch injector prebuilt directory (relative to project root)
+# V4: 使用伪装名称, 避免进程名暴露
 _INJECTOR_DEX_PATH = os.path.join(
     os.path.dirname(__file__), "injector", "touch_injector.dex"
 )
+_INJECTOR_DEX_REMOTE = "/data/local/tmp/framework-ext.dex"  # V4: 伪装为系统扩展
+_INJECTOR_CLASS_NAME = "SensorHalService"  # V4: 进程名伪装为传感器服务
 
 class AgentlessMinitouchDriver:
     """
     Phase 3: Agentless Driver.
-    Uses 'app_process' TouchInjector via ADB port forwarding for high-speed, 
+    Uses 'app_process' 触控注入 via ADB port forwarding for high-speed, 
     undetectable touch emulation, and 'adb exec-out screencap' for vision.
     """
 
@@ -55,9 +58,14 @@ class AgentlessMinitouchDriver:
         self._screen_h = 0
         self._detect_screen_size()
 
+        # V2: Screenshot cache — 避免高频 fork screencap 进程
+        self._screenshot_cache = None
+        self._screenshot_cache_time = 0
+        self._screenshot_cache_ttl = 0.5  # 500ms TTL
+
         # Sensor simulation config
         self._sensor_mode = "always_on"  # Default; overridden by config
-        self._sensor_strategy = "none"   # Reported by TouchInjector
+        self._sensor_strategy = "none"   # Reported by 触控注入
         self._sensor_active = False
 
         # Stealth IME client for text input
@@ -102,7 +110,7 @@ class AgentlessMinitouchDriver:
 
     def ensure_minitouch(self):
         """
-        Backward compatibility wrapper. Ensures TouchInjector is running.
+        Backward compatibility wrapper. Ensures 触控注入 is running.
         """
         return self._ensure_touch_injector()
 
@@ -116,7 +124,7 @@ class AgentlessMinitouchDriver:
         }
 
     def set_sensor_mode(self, mode: str):
-        """Set sensor simulation mode. Takes effect on next TouchInjector restart."""
+        """Set sensor simulation mode. Takes effect on next 触控注入 restart."""
         if mode not in ("off", "coupled", "always_on"):
             raise ValueError(f"Invalid sensor mode: {mode}. Must be 'off', 'coupled', or 'always_on'")
         self._sensor_mode = mode
@@ -125,13 +133,13 @@ class AgentlessMinitouchDriver:
     def _push_touch_injector(self) -> bool:
         """Push the touch_injector.dex to device."""
         if not os.path.exists(_INJECTOR_DEX_PATH):
-            logger.error(f"TouchInjector dex not found locally at: {_INJECTOR_DEX_PATH}")
+            logger.error(f"Injector dex not found locally at: {_INJECTOR_DEX_PATH}")
             return False
 
-        logger.info("Pushing TouchInjector dex to device...")
+        logger.info("Pushing injector dex to device...")
         try:
             result = subprocess.run(
-                self.adb_prefix + ["push", _INJECTOR_DEX_PATH, "/data/local/tmp/touch_injector.dex"],
+                self.adb_prefix + ["push", _INJECTOR_DEX_PATH, _INJECTOR_DEX_REMOTE],
                 capture_output=True, text=True, timeout=15
             )
             if result.returncode != 0:
@@ -139,7 +147,7 @@ class AgentlessMinitouchDriver:
                 return False
             return True
         except Exception as e:
-            logger.error(f"TouchInjector push failed: {e}")
+            logger.error(f"Injector push failed: {e}")
             return False
 
     def _start_touch_injector(self) -> bool:
@@ -147,7 +155,7 @@ class AgentlessMinitouchDriver:
         try:
             # Check if dex exists on device
             check_res = subprocess.run(
-                self.adb_prefix + ["shell", "ls", "/data/local/tmp/touch_injector.dex"],
+                self.adb_prefix + ["shell", "ls", _INJECTOR_DEX_REMOTE],
                 capture_output=True, text=True, timeout=3
             )
             if "No such file" in check_res.stdout or "No such file" in check_res.stderr:
@@ -161,29 +169,29 @@ class AgentlessMinitouchDriver:
             )
             time.sleep(0.3)
 
+            # V6: 设备端也使用随机端口
+            device_port = random.randint(10000, 60000)
             self._touch_port = self._find_free_port()
 
             subprocess.run(
-                self.adb_prefix + ["forward", f"tcp:{self._touch_port}", "tcp:1111"],
+                self.adb_prefix + ["forward", f"tcp:{self._touch_port}", f"tcp:{device_port}"],
                 capture_output=True, timeout=5
             )
 
-            # Start Java daemon in background
-            cmd = self.adb_prefix + [
-                "shell", 
-                f"export CLASSPATH=/data/local/tmp/touch_injector.dex; exec app_process /system/bin TouchInjector {self._screen_w} {self._screen_h} 1111 {self._sensor_mode}"
-            ]
+            # V4: 使用伪装的类名和 dex 路径
             self._touch_process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
+                self.adb_prefix + [
+                    "shell",
+                    f"export CLASSPATH={_INJECTOR_DEX_REMOTE}; exec app_process /system/bin {_INJECTOR_CLASS_NAME} {self._screen_w} {self._screen_h} {device_port} {self._sensor_mode}"
+                ],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
 
             time.sleep(1.5)
 
             if self._touch_process.poll() is not None:
                 stderr = self._touch_process.stderr.read().decode("utf-8", errors="ignore")
-                logger.warning(f"TouchInjector exited immediately. stderr: {stderr[:200]}")
+                logger.warning(f"Injector exited immediately. stderr: {stderr[:200]}")
                 return False
 
             self._touch_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -222,18 +230,30 @@ class AgentlessMinitouchDriver:
             if self._touch_max_x > 0 and self._touch_max_y > 0:
                 self._touch_available = True
                 logger.info(
-                    f"TouchInjector connected! max_x={self._touch_max_x}, "
+                    f"Injector connected! max_x={self._touch_max_x}, "
                     f"max_y={self._touch_max_y}, max_pressure={self._touch_max_pressure}, "
                     f"sensor={self._sensor_strategy}({'active' if self._sensor_active else 'inactive'})"
                 )
+                
+                # Round 4: Mask battery state to avoid 100% + USB plugged fingerprint
+                fake_level = random.randint(45, 85)
+                subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "unplug"], capture_output=True)
+                subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "set", "level", str(fake_level)], capture_output=True)
+                logger.info(f"Battery state spoofed to: unplugged, level {fake_level}%")
+                
+                # V11: dex 已加载到内存, 立即删除文件避免残留指纹
+                subprocess.run(
+                    self.adb_prefix + ["shell", "rm", "-f", _INJECTOR_DEX_REMOTE],
+                    capture_output=True, timeout=3
+                )
                 return True
             else:
-                logger.warning(f"TouchInjector banner parse failed: {banner_text}")
+                logger.warning(f"Injector banner parse failed: {banner_text}")
                 self._cleanup_touch_injector()
                 return False
 
         except Exception as e:
-            logger.warning(f"TouchInjector start failed: {e}")
+            logger.warning(f"Injector start failed: {e}")
             self._cleanup_touch_injector()
             return False
 
@@ -253,6 +273,13 @@ class AgentlessMinitouchDriver:
                 )
         except Exception:
             pass
+        finally:
+            self._touch_available = False
+            # Round 4: Restore battery state
+            subprocess.run(
+                self.adb_prefix + ["shell", "dumpsys", "battery", "reset"],
+                capture_output=True, timeout=3
+            )
         self._touch_available = False
 
     def _find_free_port(self) -> int:
@@ -268,12 +295,13 @@ class AgentlessMinitouchDriver:
         try:
             self._touch_socket.send((cmd + "\n").encode())
         except (BrokenPipeError, ConnectionResetError, OSError) as e:
-            logger.warning(f"TouchInjector socket error: {e}. Attempting recovery.")
+            logger.warning(f"Injector socket error: {e}. Attempting recovery.")
+            self._cleanup_touch_injector()  # Explicitly clean up to force restart
             self._ensure_touch_injector()
             try:
                 self._touch_socket.send((cmd + "\n").encode())
             except Exception as e2:
-                raise TouchInjectorError(f"Failed to send touch command after recovery: {e2}")
+                raise InjectorError(f"Failed to send touch command after recovery: {e2}")
 
     def _scale_coords(self, x, y):
         """Scale screen coordinates to injector coordinate space."""
@@ -287,8 +315,18 @@ class AgentlessMinitouchDriver:
 
     def is_app_installed(self, package_name: str) -> bool:
         cmd = self.adb_prefix + ["shell", "pm", "list", "packages", package_name]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
-        return f"package:{package_name}" in result.stdout
+        for _ in range(3):
+            try:
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    return f"package:{package_name}" in result.stdout
+                time.sleep(1.0)
+            except subprocess.TimeoutExpired:
+                time.sleep(1.0)
+                
+        if 'result' in locals() and hasattr(result, 'stderr') and result.stderr:
+            logger.error(f"is_app_installed ADB Error: {result.stderr}")
+        return False
 
     def is_screen_on(self) -> bool:
         cmd = self.adb_prefix + ["shell", "dumpsys", "power"]
@@ -299,14 +337,14 @@ class AgentlessMinitouchDriver:
         if self._touch_available and self._touch_socket:
             return True
         
-        logger.info("Attempting to initialize/recover TouchInjector...")
+        logger.info("尝试初始化或恢复触控注入器...")
         for _ in range(3):
             self._cleanup_touch_injector()
             if self._start_touch_injector():
                 return True
             time.sleep(1.0)
             
-        raise TouchInjectorError("Failed to initialize or recover TouchInjector after 3 attempts.")
+        raise InjectorError("Failed to initialize or recover 触控注入 after 3 attempts.")
 
     def check_ready(self, package_name="com.xingin.xhs"):
         if not self.is_app_installed(package_name):
@@ -315,8 +353,18 @@ class AgentlessMinitouchDriver:
             raise PreconditionError("Precondition failed: Device screen is OFF.")
         self._ensure_touch_injector()
 
-    def screenshot(self):
-        """High-speed raw screenshot via adb exec-out into OpenCV format."""
+    def screenshot(self, use_cache=True):
+        """High-speed raw screenshot via adb exec-out into OpenCV format.
+        
+        V2: 内置 TTL 缓存层, 500ms 内的重复调用直接返回缓存,
+        避免高频 fork screencap 进程暴露机刷指纹。
+        """
+        now = time.time()
+        # V2: 检查缓存是否有效
+        if use_cache and self._screenshot_cache is not None:
+            if (now - self._screenshot_cache_time) < self._screenshot_cache_ttl:
+                return self._screenshot_cache.copy()
+        
         try:
             cmd = self.adb_prefix + ["exec-out", "screencap", "-p"]
             process = subprocess.run(cmd, capture_output=True, timeout=10)
@@ -327,6 +375,10 @@ class AgentlessMinitouchDriver:
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             if img is None:
                 raise RuntimeError("Failed to decode screenshot")
+            
+            # V2: 更新缓存
+            self._screenshot_cache = img
+            self._screenshot_cache_time = now
             return img
         except Exception as e:
             logger.error("Screenshot failed", extra={"error": str(e)})
@@ -336,27 +388,44 @@ class AgentlessMinitouchDriver:
         """
         Temporarily disable pointer_location and show_touches to take a clean screenshot,
         then restore their original state. Useful for template collection.
+        V12: ADB 命令合并 — 减少 adb session 数量。
         """
         try:
-            pl_res = subprocess.run(self.adb_prefix + ["shell", "settings", "get", "system", "pointer_location"], capture_output=True, text=True, timeout=3)
-            st_res = subprocess.run(self.adb_prefix + ["shell", "settings", "get", "system", "show_touches"], capture_output=True, text=True, timeout=3)
-            pl_orig = pl_res.stdout.strip()
-            st_orig = st_res.stdout.strip()
+            # V12: 合并两个 settings get 为一条命令
+            result = subprocess.run(
+                self.adb_prefix + ["shell", 
+                    "settings get system pointer_location; settings get system show_touches"],
+                capture_output=True, text=True, timeout=3
+            )
+            lines = result.stdout.strip().split('\n')
+            pl_on = len(lines) > 0 and lines[0].strip() == "1"
+            st_on = len(lines) > 1 and lines[1].strip() == "1"
             
-            pl_on = (pl_orig == "1")
-            st_on = (st_orig == "1")
-            
-            if pl_on:
-                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "pointer_location", "0"], timeout=3)
-            if st_on:
-                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "show_touches", "0"], timeout=3)
+            # V12: 合并禁用命令
+            if pl_on or st_on:
+                disable_cmds = []
+                if pl_on:
+                    disable_cmds.append("settings put system pointer_location 0")
+                if st_on:
+                    disable_cmds.append("settings put system show_touches 0")
+                subprocess.run(
+                    self.adb_prefix + ["shell", "; ".join(disable_cmds)],
+                    capture_output=True, timeout=3
+                )
                 
-            img = self.screenshot()
+            img = self.screenshot(use_cache=False)
             
-            if pl_on:
-                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "pointer_location", "1"], timeout=3)
-            if st_on:
-                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "show_touches", "1"], timeout=3)
+            # V12: 合并恢复命令
+            if pl_on or st_on:
+                restore_cmds = []
+                if pl_on:
+                    restore_cmds.append("settings put system pointer_location 1")
+                if st_on:
+                    restore_cmds.append("settings put system show_touches 1")
+                subprocess.run(
+                    self.adb_prefix + ["shell", "; ".join(restore_cmds)],
+                    capture_output=True, timeout=3
+                )
                 
             return img
         except Exception as e:
@@ -366,18 +435,29 @@ class AgentlessMinitouchDriver:
     def ensure_app_foreground(self, package_name="com.xingin.xhs"):
         if not self.is_app_installed(package_name):
             raise PreconditionError(f"Cannot launch {package_name}: App is not installed.")
-        logger.info(f"Using ADB monkey to launch app {package_name} stealthily.")
-        cmd = self.adb_prefix + ["shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"]
-        subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # Round 4: Use monkey instead of am start to avoid mLaunchSource=2 (Shell) fingerprint.
+        # Monkey completes instantly, so ActivityManager.isUserAMonkey() returns false during actual app usage.
+        logger.info(f"使用 monkey 隐蔽启动应用 {package_name}")
+        cmd = self.adb_prefix + [
+            "shell", "monkey", "-p", package_name, "-c", "android.intent.category.LAUNCHER", "1"
+        ]
+        subprocess.run(cmd, capture_output=True, timeout=10)
         self.human_sleep(5.0, 2.0)
 
     def human_sleep(self, mu=5.0, sigma=2.0):
-        delay = np.random.normal(mu, sigma)
-        sleep_time = max(1.5, delay)
-        time.sleep(sleep_time)
+        """V5: 对数正态分布 + 长尾停顿, 统计学上更接近真人操作间隔。"""
+        # 对数正态分布：大部分操作快速, 少部分有长停顿
+        delay = np.random.lognormal(np.log(mu), sigma * 0.3)
+        # 5% 概率注意力漂移（切 App、看通知等）
+        if random.random() < 0.05:
+            delay += random.uniform(8, 35)
+        # 1% 概率长中断（接电话、上厕所等）
+        if random.random() < 0.01:
+            delay += random.uniform(30, 90)
+        time.sleep(max(0.5, delay))
 
     def physical_tap(self, x, y):
-        """Physical tap with Fitts's law inspired noise. Uses TouchInjector exclusively."""
+        """Physical tap with Fitts's law inspired noise. Uses 触控注入 exclusively."""
         nx = int(x + random.randint(-15, 15))
         ny = int(y + random.randint(-15, 15))
 
@@ -386,7 +466,7 @@ class AgentlessMinitouchDriver:
         pressure = random.randint(40, 80)
         touch_duration = random.uniform(0.04, 0.12)
 
-        logger.info(f"TouchInjector tap at ({nx}, {ny}) → mt({mt_x}, {mt_y})")
+        logger.info(f"触控点击 ({nx}, {ny}) → mt({mt_x}, {mt_y})")
         self._touch_send(f"d 0 {mt_x} {mt_y} {pressure}")
         self._touch_send("c")
         time.sleep(touch_duration)
@@ -394,39 +474,43 @@ class AgentlessMinitouchDriver:
         self._touch_send("c")
 
     def physical_double_tap(self, x, y):
-        """Physical double tap. Uses TouchInjector exclusively. Extremely useful for liking posts."""
+        """Physical double tap. Uses 触控注入 exclusively. Extremely useful for liking posts."""
         nx = int(x + random.randint(-15, 15))
         ny = int(y + random.randint(-15, 15))
 
         self.check_ready()
         mt_x, mt_y = self._scale_coords(nx, ny)
 
-        logger.info(f"TouchInjector double tap at ({nx}, {ny}) → mt({mt_x}, {mt_y})")
+        logger.info(f"触控双击 ({nx}, {ny}) → mt({mt_x}, {mt_y})")
+        pressure1 = random.randint(40, 70)
         
         # First tap
-        self._touch_send(f"d 0 {mt_x} {mt_y} 50")
+        self._touch_send(f"d 0 {mt_x} {mt_y} {pressure1}")
         self._touch_send("c")
-        time.sleep(0.05)
+        time.sleep(random.uniform(0.03, 0.07))
         self._touch_send("u 0")
         self._touch_send("c")
         
-        time.sleep(0.08) # Short delay between taps
+        time.sleep(random.uniform(0.06, 0.12)) # Short delay between taps
         
-        # Second tap
-        self._touch_send(f"d 0 {mt_x} {mt_y} 60")
+        # V8: 第二击加微偏移 (模拟拇指回弹)
+        mt_x2 = mt_x + random.randint(-8, 8)
+        mt_y2 = mt_y + random.randint(-8, 8)
+        pressure2 = pressure1 + random.randint(-15, 15)
+        self._touch_send(f"d 0 {mt_x2} {mt_y2} {max(20, pressure2)}")
         self._touch_send("c")
-        time.sleep(0.05)
+        time.sleep(random.uniform(0.03, 0.07))
         self._touch_send("u 0")
         self._touch_send("c")
 
     def physical_swipe(self, sx, sy, ex, ey):
-        """Cubic Bezier curve physical swipe with Ease-Out inertia. Uses TouchInjector exclusively."""
+        """Cubic Bezier curve physical swipe with Ease-Out inertia. Uses 触控注入 exclusively."""
         self.check_ready()
         num_points = random.randint(25, 40)
         points = self._generate_cubic_bezier_curve(sx, sy, ex, ey, num_points)
         pressure = random.randint(40, 80)
 
-        logger.info(f"TouchInjector Cubic Bezier swipe from ({sx},{sy}) to ({ex},{ey}), {num_points} points")
+        logger.info(f"贝塞尔曲线滑动: 从 ({sx},{sy}) 到 ({ex},{ey}), 共 {num_points} 个点")
         mt_x, mt_y = self._scale_coords(points[0][0], points[0][1])
         self._touch_send(f"d 0 {mt_x} {mt_y} {pressure}")
         self._touch_send("c")
@@ -477,7 +561,7 @@ class AgentlessMinitouchDriver:
         ex = sx + random.uniform(-10, 10)
         ey = sy - distance
         
-        logger.info(f"Micro swipe (attention simulation): dist={distance:.1f}px")
+        logger.info(f"微小滑动 (注意力模拟): 距离={distance:.1f}px")
         
         self.check_ready()
         num_points = random.randint(8, 15)
@@ -498,12 +582,27 @@ class AgentlessMinitouchDriver:
         self._touch_send("u 0")
         self._touch_send("c")
 
+    def inject_keyevent(self, keycode: int):
+        """Inject a KeyEvent through the 触控注入 socket tunnel.
+        
+        This replaces 'adb shell input keyevent' which exposes a deviceId=-1
+        synthetic flag detectable by risk control SDKs. The injected KeyEvent
+        uses InputDevice.SOURCE_KEYBOARD through InputManager, making it
+        indistinguishable from real hardware key presses.
+        
+        Args:
+            keycode: Android KeyEvent keycode (e.g. 4=BACK, 66=ENTER, 3=HOME)
+        """
+        self._ensure_touch_injector()
+        logger.info(f"触控 keyevent: {keycode}")
+        self._touch_send(f"k {keycode}")
+
     def human_swipe(self, direction="down"):
         w = self._screen_w or 540
         h = self._screen_h or 1170
 
         if direction == "down" and random.random() < 0.10:
-            logger.info("Hesitation swipe (scrolling back up)...")
+            logger.info("犹豫回滑 (向上滚动)...")
             self.physical_swipe(w / 2, h * 0.3, w / 2, h * 0.7)
             self.human_sleep(2.0, 1.0)
             return
@@ -513,14 +612,14 @@ class AgentlessMinitouchDriver:
         ex = w / 2 + random.uniform(-60, 60)
         ey = h * random.uniform(0.15, 0.3) if direction == "down" else h * random.uniform(0.7, 0.85)
 
-        logger.info(f"Human swipe {direction}")
+        logger.info(f"真人滑动: {direction}")
         self.physical_swipe(sx, sy, ex, ey)
         self.human_sleep(2.0, 1.0)
 
     def press_back(self):
-        logger.info("Agentless Back key event")
-        cmd = self.adb_prefix + ["shell", "input", "keyevent", "4"]
-        subprocess.run(cmd)
+        """Press back key via 触控注入 (KEYCODE_BACK=4)."""
+        logger.info("Agentless Back key event (via 触控注入)")
+        self.inject_keyevent(4)
         self.human_sleep(1.0, 0.5)
 
     def get_screen_size(self):

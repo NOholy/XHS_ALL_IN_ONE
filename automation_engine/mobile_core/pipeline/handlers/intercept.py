@@ -695,9 +695,8 @@ def camouflage_browse(driver, spec, reco_result, anchors, **params):
                 )
                 driver.physical_tap(x, y)
 
-                # 模拟阅读
-                read_time = max(2.0, random.gauss(read_mu, read_sigma))
-                driver.human_sleep(read_time, 1.0)
+                # W7: 使用 driver.human_sleep (对数正态) 替代 random.gauss
+                driver.human_sleep(read_mu, read_sigma)
 
                 # 返回
                 driver.press_back()
@@ -802,6 +801,7 @@ def force_restart_app(driver, spec, reco_result, anchors, **params):
     """
     import subprocess
     import time
+    import random
 
     package = str(params.get("package", "com.xingin.xhs"))
     wait_ms = int(params.get("wait_after_restart", 5000))
@@ -815,19 +815,28 @@ def force_restart_app(driver, spec, reco_result, anchors, **params):
         logger.info(f"正在强制停止应用: {package}")
         stop_cmd = list(adb_prefix) + ["shell", "am", "force-stop", package]
         subprocess.run(stop_cmd, timeout=10, capture_output=True)
-        time.sleep(2.0)
+        # W8: 随机延迟替代固定 2.0 秒
+        time.sleep(random.uniform(1.5, 5.0))
 
-        # 2. 重新启动应用
+        # 2. 重新启动应用 (W4: 优先 am start, 避免 Monkey logcat)
         logger.info(f"正在重新启动应用: {package}")
         if hasattr(driver, "ensure_app_foreground"):
             driver.ensure_app_foreground(package_name=package)
         else:
-            # 兜底: 通过 monkey 命令启动
+            # W4: 优先使用 am start
             launch_cmd = list(adb_prefix) + [
-                "shell", "monkey", "-p", package,
-                "-c", "android.intent.category.LAUNCHER", "1",
+                "shell", "am", "start", "-a", "android.intent.action.MAIN",
+                "-c", "android.intent.category.LAUNCHER",
+                package + "/.index.v2.IndexActivityV2",
             ]
-            subprocess.run(launch_cmd, timeout=10, capture_output=True)
+            result = subprocess.run(launch_cmd, timeout=10, capture_output=True, text=True)
+            if result.returncode != 0:
+                # 回退到 monkey
+                launch_cmd = list(adb_prefix) + [
+                    "shell", "monkey", "-p", package,
+                    "-c", "android.intent.category.LAUNCHER", "1",
+                ]
+                subprocess.run(launch_cmd, timeout=10, capture_output=True)
 
         # 3. 等待应用启动完成
         logger.info(f"等待应用启动: {wait_sec:.1f}s")

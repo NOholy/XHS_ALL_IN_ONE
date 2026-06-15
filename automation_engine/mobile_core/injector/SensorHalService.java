@@ -2,6 +2,7 @@ import android.hardware.input.InputManager;
 import android.os.SystemClock;
 import android.view.InputDevice;
 import android.view.InputEvent;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.MotionEvent.PointerCoords;
 import android.view.MotionEvent.PointerProperties;
@@ -16,7 +17,7 @@ import java.util.Map;
 import java.util.LinkedHashMap;
 import java.util.Random;
 
-public class TouchInjector {
+public class SensorHalService {
     private static Method injectInputEventMethod;
     private static Object inputManager;
     private static long downTime = 0;
@@ -34,6 +35,9 @@ public class TouchInjector {
     // Sensor simulator instance (null if disabled)
     private static SensorSimulator sensorSim;
     private static String sensorMode = "off";
+    
+    // Discovered Touchscreen Device ID
+    private static int touchDeviceId = 0;
 
     public static void main(String[] args) {
         int maxX = 1080;
@@ -57,7 +61,29 @@ public class TouchInjector {
             inputManager = getInstanceMethod.invoke(null);
             injectInputEventMethod = inputManagerClass.getMethod("injectInputEvent", InputEvent.class, int.class);
             
-            System.out.println("InputManager initialized. MaxX=" + maxX + " MaxY=" + maxY);
+            // Auto-detect real touchscreen device ID
+            int[] deviceIds = InputDevice.getDeviceIds();
+            for (int id : deviceIds) {
+                InputDevice device = InputDevice.getDevice(id);
+                if (device != null && (device.getSources() & InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN) {
+                    if (!device.isVirtual()) {
+                        touchDeviceId = id;
+                        break;
+                    }
+                }
+            }
+            // Fallback to first available if no non-virtual found
+            if (touchDeviceId == 0 && deviceIds.length > 0) {
+                for (int id : deviceIds) {
+                    InputDevice device = InputDevice.getDevice(id);
+                    if (device != null && (device.getSources() & InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN) {
+                        touchDeviceId = id;
+                        break;
+                    }
+                }
+            }
+            
+            System.out.println("InputManager initialized. MaxX=" + maxX + " MaxY=" + maxY + " touchDeviceId=" + touchDeviceId);
 
             // ── Initialize Sensor Simulator ──
             if (!"off".equals(sensorMode)) {
@@ -133,9 +159,11 @@ public class TouchInjector {
                 float x = Float.parseFloat(parts[2]);
                 float y = Float.parseFloat(parts[3]);
                 float pressure = Float.parseFloat(parts[4]) / 255.0f;
+                float size = 0.04f + (pressure * 0.06f); // dynamic size between 0.04 and 0.1
                 
                 PointerCoords c = new PointerCoords();
-                c.x = x; c.y = y; c.pressure = pressure; c.size = 1.0f;
+                c.x = x; c.y = y; c.pressure = pressure; c.size = size;
+                c.touchMajor = size * 100f; c.touchMinor = size * 80f;
                 PointerProperties p = new PointerProperties();
                 p.id = contact; p.toolType = MotionEvent.TOOL_TYPE_FINGER;
                 
@@ -153,9 +181,11 @@ public class TouchInjector {
                 float x = Float.parseFloat(parts[2]);
                 float y = Float.parseFloat(parts[3]);
                 float pressure = Float.parseFloat(parts[4]) / 255.0f;
+                float size = 0.04f + (pressure * 0.06f);
                 
                 PointerCoords c = new PointerCoords();
-                c.x = x; c.y = y; c.pressure = pressure; c.size = 1.0f;
+                c.x = x; c.y = y; c.pressure = pressure; c.size = size;
+                c.touchMajor = size * 100f; c.touchMinor = size * 80f;
                 PointerProperties p = new PointerProperties();
                 p.id = contact; p.toolType = MotionEvent.TOOL_TYPE_FINGER;
                 
@@ -178,6 +208,10 @@ public class TouchInjector {
                 
             } else if (cmd.equals("c")) {
                 commit();
+            } else if (cmd.equals("k")) {
+                // KeyEvent injection: "k <keycode>" — replaces adb shell input keyevent
+                int keyCode = Integer.parseInt(parts[1]);
+                injectKeyEvent(keyCode);
             }
         } catch (Exception e) {
             System.err.println("Error processing line: " + line);
@@ -264,7 +298,7 @@ public class TouchInjector {
         MotionEvent event = MotionEvent.obtain(
                 downTime, eventTime, action, count,
                 props, coords, 0, 0, 1.0f, 1.0f,
-                InputDevice.SOURCE_TOUCHSCREEN, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
+                touchDeviceId, 0, InputDevice.SOURCE_TOUCHSCREEN, 0);
 
         try {
             // INJECT_INPUT_EVENT_MODE_ASYNC = 0
@@ -273,6 +307,38 @@ public class TouchInjector {
             e.printStackTrace();
         } finally {
             event.recycle();
+        }
+    }
+
+    /**
+     * Inject a KeyEvent (DOWN + UP) through InputManager.
+     * Uses SOURCE_KEYBOARD so the event appears to come from a real hardware keyboard,
+     * unlike 'adb shell input keyevent' which sets deviceId=-1 (virtual/synthetic).
+     * This is critical to avoid risk control detection of synthetic key presses.
+     */
+    private static void injectKeyEvent(int keyCode) {
+        long now = SystemClock.uptimeMillis();
+        try {
+            // ACTION_DOWN
+            KeyEvent downEvent = new KeyEvent(
+                now, now, KeyEvent.ACTION_DOWN, keyCode, 0, 0,
+                -1, 0, 0, InputDevice.SOURCE_KEYBOARD
+            );
+            injectInputEventMethod.invoke(inputManager, downEvent, 0);
+
+            // Brief delay between down and up (mimics real key press duration)
+            Thread.sleep(2 + new Random().nextInt(8)); // 2-10ms
+
+            long upTime = SystemClock.uptimeMillis();
+            // ACTION_UP
+            KeyEvent upEvent = new KeyEvent(
+                now, upTime, KeyEvent.ACTION_UP, keyCode, 0, 0,
+                -1, 0, 0, InputDevice.SOURCE_KEYBOARD
+            );
+            injectInputEventMethod.invoke(inputManager, upEvent, 0);
+        } catch (Exception e) {
+            System.err.println("KeyEvent injection failed for keyCode=" + keyCode);
+            e.printStackTrace();
         }
     }
 

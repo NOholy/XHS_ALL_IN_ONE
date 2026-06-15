@@ -4,6 +4,7 @@
 不使用 uiautomator dump（避免进程暴露），不使用 Accessibility（避免权限检测）。
 """
 import subprocess
+import time
 from .logger import get_logger
 
 logger = get_logger("page_detector")
@@ -24,6 +25,10 @@ class LightPageDetector:
 
     def __init__(self, adb_prefix):
         self.adb_prefix = adb_prefix
+        # V10: dumpsys 结果缓存 (2s TTL), 减少 adb shell 调用频率
+        self._cache_activity = ""
+        self._cache_activity_time = 0
+        self._cache_ttl = 2.0  # 2 秒内不重复查询
 
     def get_current_activity(self) -> str:
         """
@@ -32,6 +37,11 @@ class LightPageDetector:
         失败返回空字符串。
         """
         try:
+            # V10: 缓存命中时直接返回
+            now = time.time()
+            if (now - self._cache_activity_time) < self._cache_ttl and self._cache_activity:
+                return self._cache_activity
+
             result = subprocess.run(
                 self.adb_prefix + ["shell", "dumpsys", "window", "windows"],
                 capture_output=True, text=True, timeout=3
@@ -41,7 +51,9 @@ class LightPageDetector:
                     import re
                     m = re.search(r'([a-zA-Z0-9\._]+/[a-zA-Z0-9\._]+)', line)
                     if m:
-                        return m.group(1)
+                        self._cache_activity = m.group(1)
+                        self._cache_activity_time = now
+                        return self._cache_activity
         except Exception as e:
             logger.debug(f"get_current_activity failed: {e}")
         return ""
@@ -98,7 +110,15 @@ class LightPageDetector:
 
         # XHS Activity 映射（基于 v9.x 版本，可能需要随版本更新）
         activity_lower = activity.lower()
-        if any(k in activity_lower for k in ["main", "home", "splash"]):
+        
+        # ⚠️ 重要：IndexActivityV2 是小红书的万能容器 Activity，
+        # 首页、视频流、购物、消息等所有底部 Tab 页面共用这一个 Activity。
+        # 因此绝对不能仅凭 Activity 名称就判定为 home_feed，
+        # 必须返回 unknown 让 navigator 的视觉层（OCR + 瀑布流检测）去做精细区分。
+        if "indexactivity" in activity_lower:
+            return "unknown"
+        
+        if any(k in activity_lower for k in ["main", "splash"]):
             return "home_feed"
         elif any(k in activity_lower for k in ["searchresult", "search_result"]):
             return "search_results"

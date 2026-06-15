@@ -1,0 +1,117 @@
+{"timestamp": "2026-06-15T14:05:07", "event": "node_hit", "node": "Navigate_Home", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:05:15", "event": "action_done", "node": "Navigate_Home", "action_type": "launch_app", "success": true, "duration_ms": 8190}
+{"timestamp": "2026-06-15T14:05:24", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:05:37", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 13280}
+{"timestamp": "2026-06-15T14:05:43", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:05:43", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 2}
+{"timestamp": "2026-06-15T14:05:49", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:05:53", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 4529}
+{"timestamp": "2026-06-15T14:06:00", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:06:00", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:06:07", "event": "node_hit", "node": "Branch_Profile", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:06:34", "event": "action_done", "node": "Branch_Profile", "action_type": "navigate", "success": true, "duration_ms": 27467}
+{"timestamp": "2026-06-15T14:06:39", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:06:56", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 17324}
+{"timestamp": "2026-06-15T14:07:02", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:07:02", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:07:08", "event": "node_hit", "node": "Branch_Profile", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:07:21", "event": "action_done", "node": "Branch_Profile", "action_type": "navigate", "success": true, "duration_ms": 13257}
+{"timestamp": "2026-06-15T14:07:26", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:09:12", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 106365}
+{"timestamp": "2026-06-15T14:09:20", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:09:20", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:09:27", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:09:33", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 5662}
+{"timestamp": "2026-06-15T14:09:40", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:09:40", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:09:47", "event": "node_hit", "node": "Branch_EnterPost", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:09:49", "event": "action_done", "node": "Branch_EnterPost", "action_type": "custom", "success": true, "duration_ms": 1806}
+{"timestamp": "2026-06-15T14:09:55", "event": "node_hit", "node": "Tap_Post", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:09:59", "event": "action_done", "node": "Tap_Post", "action_type": "tap", "success": true, "duration_ms": 3266}
+{"timestamp": "2026-06-15T14:10:04", "event": "node_hit", "node": "Wait_Detail", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:07", "event": "action_done", "node": "Wait_Detail", "action_type": "do_nothing", "success": true, "duration_ms": 2174}
+{"timestamp": "2026-06-15T14:10:12", "event": "node_hit", "node": "Farm_Read", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:17", "event": "action_done", "node": "Farm_Read", "action_type": "custom", "success": true, "duration_ms": 5267}
+{"timestamp": "2026-06-15T14:10:22", "event": "node_hit", "node": "Try_Like", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:27", "event": "node_hit", "node": "Try_Collect", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:33", "event": "node_hit", "node": "Try_Comment", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:38", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:53", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 14892}
+{"timestamp": "2026-06-15T14:10:59", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:10:59", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:11:06", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:11:11", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 5055}
+{"timestamp": "2026-06-15T14:11:19", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:11:19", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:11:28", "event": "node_hit", "node": "Branch_EnterPost", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:11:30", "event": "action_done", "node": "Branch_EnterPost", "action_type": "custom", "success": true, "duration_ms": 1802}
+{"timestamp": "2026-06-15T14:11:39", "event": "node_hit", "node": "Tap_Post", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:11:42", "event": "action_done", "node": "Tap_Post", "action_type": "tap", "success": true, "duration_ms": 3248}
+{"timestamp": "2026-06-15T14:11:45", "event": "node_hit", "node": "Wait_Detail", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:11:46", "event": "action_done", "node": "Wait_Detail", "action_type": "do_nothing", "success": true, "duration_ms": 1608}
+{"timestamp": "2026-06-15T14:11:50", "event": "node_hit", "node": "Farm_Read", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:11:54", "event": "action_done", "node": "Farm_Read", "action_type": "custom", "success": true, "duration_ms": 3869}
+{"timestamp": "2026-06-15T14:11:56", "event": "node_hit", "node": "Try_Like", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:11:58", "event": "node_hit", "node": "Try_Collect", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:00", "event": "node_hit", "node": "Try_Comment", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:02", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:07", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 5470}
+{"timestamp": "2026-06-15T14:12:12", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:12", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:12:15", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:12:19", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 4001}
+{"timestamp": "2026-06-15T14:12:21", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:21", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:12:22", "event": "node_hit", "node": "Branch_EnterPost", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:12:24", "event": "action_done", "node": "Branch_EnterPost", "action_type": "custom", "success": true, "duration_ms": 1435}
+{"timestamp": "2026-06-15T14:12:27", "event": "node_hit", "node": "Tap_Post", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:30", "event": "action_done", "node": "Tap_Post", "action_type": "tap", "success": true, "duration_ms": 3279}
+{"timestamp": "2026-06-15T14:12:33", "event": "node_hit", "node": "Wait_Detail", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:35", "event": "action_done", "node": "Wait_Detail", "action_type": "do_nothing", "success": true, "duration_ms": 2156}
+{"timestamp": "2026-06-15T14:12:37", "event": "node_hit", "node": "Farm_Read", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:44", "event": "action_done", "node": "Farm_Read", "action_type": "custom", "success": true, "duration_ms": 6636}
+{"timestamp": "2026-06-15T14:12:47", "event": "node_hit", "node": "Try_Like", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:47", "event": "action_done", "node": "Try_Like", "action_type": "tap", "success": true, "duration_ms": 662}
+{"timestamp": "2026-06-15T14:12:50", "event": "node_hit", "node": "Try_Collect", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:51", "event": "node_hit", "node": "Try_Comment", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:12:54", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:00", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 5554}
+{"timestamp": "2026-06-15T14:13:02", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:02", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:13:03", "event": "node_hit", "node": "Branch_Search", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:13:20", "event": "action_done", "node": "Branch_Search", "action_type": "navigate", "success": true, "duration_ms": 17233}
+{"timestamp": "2026-06-15T14:13:23", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:23", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:23", "event": "node_hit", "node": "Branch_Search", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:13:23", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:37", "event": "action_done", "node": "Farm_NavigateHome", "action_type": "navigate", "success": true, "duration_ms": 13319}
+{"timestamp": "2026-06-15T14:13:40", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:41", "event": "node_hit", "node": "Branch_Search", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:13:44", "event": "node_hit", "node": "Farm_NavigateHome", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:45", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:45", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:13:48", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:13:51", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 3643}
+{"timestamp": "2026-06-15T14:13:54", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:13:56", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:13:58", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:00", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:03", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:04", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:07", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:10", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:12", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:15", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:18", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:19", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:22", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:25", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:28", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:28", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:14:32", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:35", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:35", "event": "action_done", "node": "Decide_Branch", "action_type": "custom", "success": true, "duration_ms": 0}
+{"timestamp": "2026-06-15T14:14:36", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}
+{"timestamp": "2026-06-15T14:14:41", "event": "action_done", "node": "Branch_Browse", "action_type": "human_swipe", "success": true, "duration_ms": 4776}
+{"timestamp": "2026-06-15T14:14:44", "event": "node_hit", "node": "Decide_Branch", "description": "", "confidence": 1.0, "position": [540, 1110], "text": null}
+{"timestamp": "2026-06-15T14:14:47", "event": "node_hit", "node": "Branch_Browse", "description": "", "confidence": 0.0, "position": null, "text": null}

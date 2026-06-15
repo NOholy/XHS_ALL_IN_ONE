@@ -55,16 +55,27 @@ class XHSNavigator:
         home_indicators = False
         
         try:
+            h_screen = img.shape[0] if img is not None else 2220
             ocr_raw = self.ocr.ocr_image(img)
-            parsed_text = [text for box, text, conf in self.ocr.safe_parse_results(ocr_raw) if conf >= 0.6]
+            parsed_items = [(box, text) for box, text, conf in self.ocr.safe_parse_results(ocr_raw) if conf >= 0.6]
+            parsed_text = [item[1] for item in parsed_items]
             # Check all indicators against the single parsed text list
             search_results_indicators = any("搜索" in t for t in parsed_text)
             comment_ocr = any("说点什么" in t for t in parsed_text)
             profile_indicators = any("编辑资料" in t for t in parsed_text)
-            # Home indicator usually needs higher confidence, but here we just check text presence
-            home_indicators = any("推荐" in t for t in parsed_text)
+            
+            # 严格限制：只允许位于屏幕顶部 15% 区域内的 "发现" / "附近" / "同城" 触发首页判断
+            # 这彻底杜绝了视频中的字幕/水印包含这些字眼导致的误判
+            home_exclusive_text = False
+            for box, text in parsed_items:
+                if box and len(box) > 0:
+                    top_y = min(p[1] for p in box)
+                    if top_y < h_screen * 0.15:
+                        if any(w in text for w in ["发现", "附近", "同城"]):
+                            home_exclusive_text = True
+                            break
         except Exception as e:
-            logger.warning(f"OCR fallback failed during detect_current_page: {e}")
+            logger.warning(f"detect_current_page OCR 降级识别失败: {e}")
 
         # 判断逻辑
         if comment_ocr:
@@ -73,18 +84,28 @@ class XHSNavigator:
             return PAGE_PROFILE
         if search_results_indicators and note_cards:
             return PAGE_SEARCH_RESULTS
-        if home_indicators:
-            return PAGE_HOME_FEED
+            
+        # ==========================================
+        # 彻底最优的首页判定逻辑 (Round 4 补充优化)
+        # ==========================================
+        # 1. 物理几何特征：屏幕上存在双列瀑布流卡片。这是最硬核的特征，但可能在弱网加载时为空。
         if note_cards:
             return PAGE_HOME_FEED
+            
+        # 2. 独占文本特征：首页顶部一定会有 "发现"、"附近" 或 "同城"。
+        # 视频 Tab 顶部只有 "推荐"，绝对没有 "附近" 或 "同城"。
+        # 且已被严格限定在屏幕顶部 15% 的 Y 坐标范围内。
+        if home_exclusive_text:
+            return PAGE_HOME_FEED
 
+        # 视频页面、广告白屏、未知弹窗等，统统 fallback 到 UNKNOWN，交由底层的连续 Back + 兜底点击处理
         return PAGE_UNKNOWN
 
     def go_home(self):
         """确保回到首页推荐流"""
         current = self.detect_current_page()
         if current == PAGE_HOME_FEED:
-            logger.info("Detected home feed Activity, but tapping Home tab anyway to ensure we are not trapped in Profile tab.")
+            logger.info("检测到处于首页 Activity，但仍点击首页 Tab 以防被困在个人主页等子页面。")
             w_screen, h_screen = self.driver.get_screen_size()
             tab_y = int(h_screen * 0.96)
             tab_x = int(w_screen * 0.1)
@@ -92,7 +113,7 @@ class XHSNavigator:
             self.driver.human_sleep(1.0, 0.5)
             return True
 
-        logger.info("Not on home feed. Starting smart backtrack to home...")
+        logger.info("当前不在首页。启动智能回退机制返回首页...")
         # 智能回退：连续按返回键，直到状态变成首页
         for _ in range(5):
             self.go_back()
@@ -100,7 +121,7 @@ class XHSNavigator:
             
             current = self.detect_current_page()
             if current == PAGE_HOME_FEED:
-                logger.info("Successfully returned to home feed.")
+                logger.info("成功返回首页。")
                 return True
                 
             if current == PAGE_UNKNOWN:
@@ -108,7 +129,7 @@ class XHSNavigator:
 
         # 假如连续返回 5 次还没到首页，可能是卡在某个特殊的根页面。
         # 此时尝试点击底部的首页 Tab 作为最终兜底
-        logger.warning("Backtrack loop failed to reach home. Trying bottom tab fallback.")
+        logger.warning("智能回退未能到达首页，尝试底部 Tab 兜底方案。")
         w_screen, h_screen = self.driver.get_screen_size()
         tab_y = int(h_screen * 0.96)  # Tab 栏中心 y 坐标
         tab_x = int(w_screen * 0.1)   # 首页 Tab (第 1 个)

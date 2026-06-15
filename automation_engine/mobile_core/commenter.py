@@ -48,10 +48,10 @@ class SmartCommenter:
             return self._generate_llm_comment(post_context, keyword, prompt_override)
         elif mode == "contextual" and post_context:
             tpl = self._generate_contextual_comment(post_context, templates)
-            return self._parse_spintax(tpl)
+            return self._humanize_comment(self._parse_spintax(tpl))
         else:
             tpl = random.choice(templates)
-            return self._parse_spintax(tpl)
+            return self._humanize_comment(self._parse_spintax(tpl))
 
     def _parse_spintax(self, text: str) -> str:
         """解析 Spintax 格式，例如 '{你好|哈喽}，{想问下|请问}'"""
@@ -132,6 +132,9 @@ class SmartCommenter:
             comment = result["choices"][0]["message"]["content"].strip()
             logger.info(f"LLM generated comment: '{comment}'")
 
+            # W2: NLP 反指纹后处理
+            comment = self._humanize_comment(comment)
+
             # 记录到会话历史（借鉴 ApkClaw 的上下文压缩：只记摘要前15字）
             self._llm_history.append(comment[:15])
             if len(self._llm_history) > 20:
@@ -140,7 +143,48 @@ class SmartCommenter:
             return comment
         except Exception as e:
             logger.error(f"LLM generation failed, falling back to template: {e}")
-            return random.choice(cfg.comment_templates)
+            return self._humanize_comment(random.choice(cfg.comment_templates))
+
+    def _humanize_comment(self, text: str) -> str:
+        """
+        W2: NLP 反指纹后处理。
+        对评论文本进行随机微扰，使其更难被 BERT/RoBERTa 分类器标记为机器生成。
+        - 15% 概率注入「的/得/地」混用错别字 (中文最常见的人类错误)
+        - 10% 概率注入口癖填充词
+        - 10% 概率截断尾部标点
+        - 5% 概率在末尾加上随机重复字符
+        """
+        import random
+
+        # 1. 「的/得/地」混用 (15% 概率)
+        if random.random() < 0.15:
+            de_map = {"的": "得", "得": "的", "地": "的"}
+            chars = list(text)
+            de_positions = [i for i, c in enumerate(chars) if c in de_map]
+            if de_positions:
+                pos = random.choice(de_positions)
+                chars[pos] = de_map[chars[pos]]
+                text = "".join(chars)
+
+        # 2. 注入口癖填充词 (10%)
+        if random.random() < 0.10:
+            fillers = ["哈哈", "啊", "嘿嘿", "哦哦", "嗯嗯", "啊啊啊"]
+            filler = random.choice(fillers)
+            # 随机插入到句首或句尾
+            if random.random() < 0.5:
+                text = filler + " " + text
+            else:
+                text = text.rstrip("。！!~") + " " + filler
+
+        # 3. 截断尾部标点 (10%) — 真人经常不打标点
+        if random.random() < 0.10:
+            text = text.rstrip("。！!？?~，,")
+
+        # 4. 末尾重复字符 (5%) — 真人常见 "好好好", "去去去"
+        if random.random() < 0.05 and len(text) > 0:
+            text += text[-1] * random.randint(1, 2)
+
+        return text.strip()
 
     # --- 评论执行 ---
 
@@ -226,12 +270,16 @@ class SmartCommenter:
         else:
             logger.warning("Comment may not have posted (shadowban or network issue)")
 
-        # 强制冷却
-        cooldown = random.randint(
-            self.config.risk_control.comment_cooldown_min,
-            self.config.risk_control.comment_cooldown_max
-        )
-        logger.info(f"Mandatory cooldown: {cooldown}s")
+        # W6: 对数正态冷却 (均匀分布容易被统计检验识别)
+        import numpy as np
+        cooldown_mu = (self.config.risk_control.comment_cooldown_min + 
+                       self.config.risk_control.comment_cooldown_max) / 2
+        cooldown = np.random.lognormal(np.log(cooldown_mu), 0.4)
+        # 10% 概率长冷却 (模拟做其他事)
+        if random.random() < 0.10:
+            cooldown += random.uniform(120, 600)
+        cooldown = max(self.config.risk_control.comment_cooldown_min, cooldown)
+        logger.info(f"Mandatory cooldown: {cooldown:.0f}s")
         time.sleep(cooldown)
 
         return success

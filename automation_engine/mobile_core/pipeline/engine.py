@@ -207,19 +207,19 @@ class PipelineExecutor:
 
         # 确定入口
         entry_name = entry or pipeline.get_entry()
-        logger.info(f"Pipeline '{pipeline.name}' starting from '{entry_name}'")
+        logger.info(f"Pipeline '{pipeline.name}' 从 '{entry_name}' 启动")
 
         try:
             self._execute_pipeline(pipeline, entry_name)
         except Exception as e:
-            logger.critical(f"Pipeline fatal error: {e}\n{traceback.format_exc()}")
+            logger.critical(f"Pipeline 致命错误: {e}\n{traceback.format_exc()}")
             self.stats.total_errors += 1
             for mw in self.middlewares:
                 mw.on_error(None, e, self)
 
         self.stats.end_time = time.time()
         summary = self.stats.summary()
-        logger.info(f"Pipeline '{pipeline.name}' finished: {summary}")
+        logger.info(f"Pipeline '{pipeline.name}' 完成: {summary}")
 
         return self.stats
 
@@ -279,20 +279,23 @@ class PipelineExecutor:
                 # 情绪推进
                 self.mood_manager.update()
 
-                # 概率门控: 结合基础概率和情绪倍率
-                current_multiplier = self.mood_manager.get_multiplier()
-                adjusted_prob = min(1.0, node.probability * current_multiplier)
+                # 概率门控: 结合基础概率和情绪倍率（仅对概率小于 1.0 的非必要交互节点生效）
+                if node.probability < 1.0:
+                    current_multiplier = self.mood_manager.get_multiplier()
+                    adjusted_prob = min(1.0, node.probability * current_multiplier)
+                else:
+                    adjusted_prob = 1.0
 
                 if random.random() > adjusted_prob:
-                    logger.info(f"[SKIP] {node.name} by probability gate "
-                                f"(base {node.probability:.0%}, mood {self.mood_manager.get_state().name} -> {adjusted_prob:.0%})")
+                    logger.info(f"[跳过] {node.name} 概率门控触发 "
+                                f"(基础 {node.probability:.0%}, 情绪 {self.mood_manager.get_state().name} -> {adjusted_prob:.0%})")
                     current_node = node
                     next_candidates = node.next
                     continue
 
                 # 配额检查
                 if node.quota_check and not self._check_quota(node.quota_check):
-                    logger.warning(f"[QUOTA] {node.quota_check} exhausted. Stopping.")
+                    logger.warning(f"[配额] {node.quota_check} 已耗尽。停止执行。")
                     break
 
                 # JumpBack 栈管理
@@ -300,7 +303,7 @@ class PipelineExecutor:
                     self._jumpback_stack.append(
                         (current_node, current_node.next)
                     )
-                    logger.debug(f"[JUMPBACK] Pushed return point: {current_node.name}")
+                    logger.debug(f"[跳转返回] 压入返回点: {current_node.name}")
 
                 # 写入识别结果的 Anchor
                 if hit.reco_result and hit.reco_result.anchors:
@@ -336,7 +339,7 @@ class PipelineExecutor:
                     current_node = node
                     next_candidates = node.next
                 else:
-                    logger.warning(f"[FAIL] Action failed at {node.name}")
+                    logger.warning(f"[失败] 动作在 {node.name} 执行失败")
                     self.stats.total_actions_failed += 1
                     next_candidates = node.on_error
                     error_handling = True

@@ -20,14 +20,14 @@ fi
 echo "Using ANDROID_JAR: $ANDROID_JAR"
 echo "Using D8: $D8"
 
-echo "Compiling TouchInjector.java..."
-javac -source 11 -target 11 -cp "$ANDROID_JAR" TouchInjector.java
+echo "Compiling SensorHalService.java..."
+javac -source 11 -target 11 -cp "$ANDROID_JAR" SensorHalService.java
 
 echo "Converting to dex using d8..."
 # Include all generated class files (inner classes: SensorSimulator, Strategy enum)
-"$D8" --release --output . TouchInjector*.class
+"$D8" --release --output . SensorHalService*.class
 
 mv classes.dex touch_injector.dex
-rm -f TouchInjector*.class
+rm -f SensorHalService*.class
 
 echo "Build successful: touch_injector.dex"

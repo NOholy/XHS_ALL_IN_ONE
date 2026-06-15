@@ -1,0 +1,25 @@
+{
+  "serial": "2972a27dae1c7ece",
+  "steps": {
+    "pre_flight": "OK",
+    "adb_check": "OK",
+    "screen_resolution": "1080x2220",
+    "cleanup_u2": "OK",
+    "touch_injector": "OK (触控注入 daemon connected)",
+    "sensor_simulation": "vibrator(active)",
+    "stealth_ime": "globally_active",
+    "disable_animations": "SKIPPED",
+    "keep_screen_on": "OK",
+    "xhs_installed": "OK",
+    "login_status": "LOGGED_IN",
+    "ip_rotation": "SKIPPED_IDEMPOTENT",
+    "template_crop": "FAILED: cannot import name 'Navigator' from 'mobile_core.navigator' (/Users/qi/ai-code-project/XHS_ALL_IN_ONE/automation_engine/mobile_core/navigator.py)"
+  },
+  "success": true,
+  "last_init_time": "2026-06-15T04:41:14.070905+00:00",
+  "screenshot_resolution": "1080x2220",
+  "physical_resolution": "1080x2220",
+  "android_version": "9",
+  "xhs_version": "9.33.4",
+  "abi": null
+}

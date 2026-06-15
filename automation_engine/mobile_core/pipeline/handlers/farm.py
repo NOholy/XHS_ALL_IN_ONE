@@ -51,11 +51,12 @@ def _ocr_screen(screen, endpoint: str):
         import time
         for attempt in range(3):
             try:
-                resp = requests.post(
+                session = requests.Session()
+                session.trust_env = False
+                resp = session.post(
                     endpoint,
                     json={"image_base64": b64},
                     timeout=30,
-                    proxies={"http": None, "https": None},
                 )
                 resp.raise_for_status()
                 data = resp.json()
@@ -63,7 +64,9 @@ def _ocr_screen(screen, endpoint: str):
                     break
             except requests.exceptions.ConnectionError as e:
                 if attempt == 2:
-                    logger.error(f"_ocr_screen connection error after retries: {e}")
+                    logger.critical(f"_ocr_screen 连接失败: {e}。OCR 服务不在线。自动终止脚本。")
+                    import os
+                    os._exit(1)
                 else:
                     time.sleep(1.0)
             except Exception as e:
@@ -259,7 +262,7 @@ def farm_random_branch(driver, spec, reco_result, anchors, **params):
     else:
         branch = "browse"
         
-    logger.info(f"Farm random branch decided: {branch}")
+    logger.info(f"养号随机分支决定为: {branch}")
     anchors.set("farm_next_branch", branch)
     return True
 
@@ -296,34 +299,47 @@ def farm_extract_anchor(driver, spec, reco_result, anchors, **params):
             break
             
     anchors.set("farm_post_anchor", anchor_text)
-    logger.info(f"Farm extracted anchor: '{anchor_text}'")
+    logger.info(f"养号提取的锚点: '{anchor_text}'")
     return True
 
 
 def farm_attention_read(driver, spec, reco_result, anchors, **params):
     """
-    模拟注意力阅读：按正态分布总时长，分段等待，概率触发微滑动。
+    模拟注意力阅读：按正态分布总时长，分段等待，概率触发真实的滑动浏览和微滑动。
     """
     mu = params.get("mu", 5.0)
     sigma = params.get("sigma", 2.0)
     
     import numpy as np
-    total_sleep_time = max(2.0, np.random.normal(mu, sigma))
-    logger.info(f"Farming attention read for {total_sleep_time:.1f}s")
+    total_sleep_time = max(3.0, np.random.normal(mu, sigma))
+    logger.info(f"养号注意力阅读中... 时长 {total_sleep_time:.1f}秒")
     
     elapsed = 0.0
     while elapsed < total_sleep_time:
-        chunk = random.uniform(2.0, 4.0)
+        # 切片等待时间改小，让循环次数增多
+        chunk = random.uniform(1.0, 2.5)
         if elapsed + chunk > total_sleep_time:
             chunk = total_sleep_time - elapsed
         time.sleep(chunk)
         elapsed += chunk
         
-        if elapsed < total_sleep_time and random.random() < 0.6:
-            if hasattr(driver, "micro_swipe"):
-                driver.micro_swipe()
+        # 不再阻断最后一轮的判定，60% 概率产生一次交互行为
+        if random.random() < 0.6:
+            action_roll = random.random()
+            if action_roll < 0.4:
+                # 40% 概率：真人大滑动向下（看长图或刷评论）
+                if hasattr(driver, "human_swipe"):
+                    logger.info("注意力阅读: 向下大滑动 (浏览更多)")
+                    driver.human_swipe("down")
+            elif action_roll < 0.5:
+                # 10% 概率：真人回滑向上（返回看前面的图）
+                if hasattr(driver, "human_swipe"):
+                    logger.info("注意力阅读: 向上大滑动 (回看)")
+                    driver.human_swipe("up")
             else:
-                driver.human_swipe("down", distance=0.1)
+                # 50% 概率：微弱抖动（盯屏模拟注意力）
+                if hasattr(driver, "micro_swipe"):
+                    driver.micro_swipe()
                 
     return True
 

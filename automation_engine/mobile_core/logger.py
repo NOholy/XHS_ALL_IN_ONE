@@ -1,12 +1,12 @@
 import logging
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 class JSONFormatter(logging.Formatter):
     def format(self, record):
         log_record = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S"),
             "level": record.levelname,
             "module": record.module,
             "message": record.getMessage(),

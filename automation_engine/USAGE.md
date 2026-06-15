@@ -1,6 +1,7 @@
 # XHS Automation Engine V2 使用文档
 
 > 工业级小红书真机自动化引擎 — 真机初始化 · 自动养号 · 话题截流
+> 已完成三轮深度反风控加固 (V1-V12 + W1-W10)，具备工业级抗指纹和 NLP 对抗能力。
 
 ---
 
@@ -254,8 +255,8 @@ python start_mobile_driver_v2.py --action intercept --comment-mode llm --live
 ```
 搜索关键词 → 翻页收集结果 → 标题关键词过滤
     → 伪装浏览（5-10个无关帖子）→ 进入目标帖子
-    → 提取内容 → 生成评论 → 发送 → OCR验证上墙
-    → 强制冷却(60-180s) → 概率性IP轮换 → 下一个
+    → 提取内容 → 生成评论 → NLP 反指纹后处理 → 发送 → OCR验证上墙
+    → 对数正态冷却(~120s) → 随机化IP轮换 → 下一个
 ```
 
 **三种评论模式**：
@@ -562,15 +563,15 @@ python start_mobile_driver_v2.py --action auto
 
 ### 6.3 风控配额默认值
 
-| 指标 | 默认上限 | 配置项 |
-|------|---------|--------|
-| 每日评论 | 10 次 | `risk_control.max_daily_comments` |
-| 每日点赞 | 30 次 | `risk_control.max_daily_likes` |
-| 每日收藏 | 15 次 | `risk_control.max_daily_collects` |
-| 每日关注 | 5 次 | `risk_control.max_daily_follows` |
-| 每日搜索 | 20 次 | `risk_control.max_daily_searches` |
-| 评论冷却 | 60-180 秒 | `risk_control.comment_cooldown_*` |
-| IP轮换频率 | 每 3 条评论 | `risk_control.ip_rotate_every_n_comments` |
+| 指标 | 默认值 | 配置项 | 说明 |
+|------|---------|--------|------|
+| 每日评论 | 10 次 | `risk_control.max_daily_comments` | |
+| 每日点赞 | 30 次 | `risk_control.max_daily_likes` | |
+| 每日收藏 | 15 次 | `risk_control.max_daily_collects` | |
+| 每日关注 | 5 次 | `risk_control.max_daily_follows` | |
+| 每日搜索 | 20 次 | `risk_control.max_daily_searches` | |
+| 评论冷却 | 对数正态 ~120s | `risk_control.comment_cooldown_*` | W6: 非均匀分布, 10% 长冷却 |
+| IP轮换频率 | 每 2-6 条评论 | `risk_control.ip_rotate_every_n_comments` | W1: 动态阈值, 隐蔽模式切换 |
 
 ---
 
@@ -650,19 +651,26 @@ rm data/commented_posts.json
 
 ### 8.1 极致拟真物理驱动 (`AgentlessDriver`)
 本引擎完全摒弃了传统的 Accessibility Service 或 UIAutomator 控件树遍历方式（极易被小红书等 App 的安全策略秒封），采用了**纯视觉+极速底层的物理模拟**方案：
-- **TouchInjector 隐蔽直连**：引擎动态下发架构无关的 Java `touch_injector.dex`，利用 `app_process` 启动高权限守护进程，通过 ADB 端口转发建立 Socket 通信。点击指令借助反射调用系统隐藏 API `InputManager.injectInputEvent` 注入 `MotionEvent`，实现无视 SELinux 限制的毫秒级防封号触控模拟。
+- **SensorHalService 隐蔽直连**：引擎动态下发架构无关的 Java `touch_injector.dex`（V4 伪装名为 `framework-ext.dex`，加载后即删除 V11），利用 `app_process` 启动高权限守护进程，通过 ADB 端口转发建立 Socket 通信。点击指令借助反射调用系统隐藏 API `InputManager.injectInputEvent` 注入 `MotionEvent`，实现无视 SELinux 限制的毫秒级防封号触控模拟。
 - **三次方贝塞尔曲线 (Cubic Bezier Curve)**：滑动操作不再是生硬的直线。底层滑动算法依据人体工程学，自动生成带有随机控制点的三次方贝塞尔曲线，模拟真人拇指的弧形滑动轨迹。
 - **高频抖动与缓动惯性**：在滑动曲线上叠加了极高频的坐标抖动（Jitter），并且根据 Ease-Out 算法控制滑动速度（初速度极快，末端因手指摩擦力逐渐减速），彻底摧毁基于触控轨迹的机器校验。
 - **微行为模拟**：引入了 `micro_swipe`（模拟真人看长文时，手持手机产生的微小上下晃动视差）以及 10% 概率触发的犹豫回滑（Hesitation Swipe）。
+- **对数正态延迟 (Log-Normal Delay)**：所有操作延迟放弃均匀分布，采用统计学上更接近人类真实行为的对数正态分布 (V5)。
 
 ### 8.2 隐蔽输入法机制 (`Stealth IME`)
 传统的 ADB 文本输入极不自然，且经常遇到 Unicode 和 Emoji 被 Shell 截断的问题。
-- **防转义的 Base64 广播通道**：系统通过自研的隐蔽输入法（Stealth IME），利用 Android 原生显式广播将中文字符经过 Base64 编码后悄悄“塞”入输入框，完美绕过 ADB Shell 的全部特殊字符过滤机制。
+- **防特征检测的隐蔽包名**：Stealth IME 已伪装为 `com.android.inputservice.settings` (W3)，深度融入系统包列表中，避免被 PackageManager 扫描。
+- **LocalServerSocket 防转义通道**：系统通过自研的隐蔽输入法，利用 `LocalServerSocket` 替代显式广播 (V1)，将中文字符经过 Base64 编码后悄悄传输，完美绕过 ADB Shell 字符过滤机制，并切断 `am broadcast` 日志特征。
 - **真人打字节奏模拟**：输入文字时绝非瞬间全盘粘贴。引擎会将整段句子拆分为字符流，每个字符之间加入 50ms~250ms 的随机延迟，甚至带有 8% 概率的“思考停顿”。在行为风控系统看来，这完全是一个真人在键盘上逐字敲击输入。
 
 ### 8.3 纯视觉独立解耦
 - **独立 OCR 微服务**：视觉感知的核心 PaddleOCR 被完全解耦为独立微服务运行（端口 8001）。这保证了主调度进程足够轻量，即使在较弱的边缘计算节点上也能完美调度控制流，并且支持远程 GPU 节点提供集中算力。
 - **纯视觉坐标计算**：所有点击皆通过 `vision.py` 使用 OpenCV 的模板匹配结合 OCR 的文本框坐标计算完成，对宿主 App 实现了绝对的“零侵入”。
+
+### 8.4 后端大数据与 NLP 对抗
+为绕过小红书后端行为模型分析，新增了多项针对性对抗策略：
+- **随机 IP 轮换隐蔽模式**：每 2-6 次 (动态随机阈值) 评论后，会通过 `svc data` 关闭再开启蜂窝数据轮换 IP (W1)。这不仅断开了完美周期行为，而且不触发系统飞行模式广播，让宿主 App 无法感知网络切换。
+- **评论内容 NLP 反指纹**：除了 20+ Spintax 巢状模板组装外，所有发送的评论都将经过 `_humanize_comment` 后处理：15% 概率出现“的/得/地”错别字，10% 概率截断尾部标点，5% 概率重复尾字，10% 概率加口癖 (W2)。配合 Zipf 字数分布，让 BERT/RoBERTa 等检测分类模型无法判断内容是否由机器生成。
 
 ---
 

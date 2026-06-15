@@ -59,6 +59,11 @@ class AccountFarmer:
         elif p == "lurker":
             self.persona_multipliers = {"like": 0.5, "collect": 0.5, "comment": 0.2, "search": 1.5}
 
+        # V9: 滑动窗口兴趣模型 — 产生时序相关的行为链
+        self._recent_actions = []  # 最近 N 步的 action 类型
+        self._interest_momentum = 0.0  # 连续浏览累积的互动欲望
+        self._last_interact_step = 0  # 上次互动的步数
+
         
         # 记录文件路径
         base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -112,7 +117,7 @@ class AccountFarmer:
         if duration_minutes is None:
             duration_minutes = self.config.farm.session_duration_minutes
 
-        logger.info(f"Starting farming session ({duration_minutes} min)")
+        logger.info(f"开始养号会话 ({duration_minutes} 分钟)")
         self.navigator.ensure_app_foreground()
         self.navigator.go_home()
 
@@ -123,7 +128,7 @@ class AccountFarmer:
 
         while time.time() < end_time and step < self.config.farm.farming_steps:
             step += 1
-            logger.info(f"Farm step {step}, elapsed: {int(time.time()-self.session_start_time)}s")
+            logger.info(f"养号步骤 {step}, 已运行: {int(time.time()-self.session_start_time)}秒")
             
             # Watchdog: 全局风控雷达扫描
             # 如果遇到轻微弹窗，这里会自动处理并继续；
@@ -135,20 +140,42 @@ class AccountFarmer:
                 logger.critical("🚨 HALTING ALL FARMING OPERATIONS IMMEDIATELY 🚨")
                 break  # 强制终止整个养号会话
 
-            # 核心行为分支（基于配置的概率）
-            roll = random.random()
+            # V9: 计算兴趣动量 — 连续浏览越多, 互动概率越高
+            browse_streak = 0
+            for a in reversed(self._recent_actions):
+                if a == "browse":
+                    browse_streak += 1
+                else:
+                    break
+            # 动量: 连续浏览 3 步后开始累积, 最多 2x 加成
+            momentum_boost = min(2.0, 1.0 + max(0, browse_streak - 2) * 0.25)
+            # 刚互动过则抑制 (认知负荷)
+            recency_penalty = 1.0
+            if self._recent_actions and self._recent_actions[-1] in ("like", "collect", "comment"):
+                recency_penalty = 0.3  # 刚互动完, 大幅抑制再次互动
 
-            if roll < self.config.farm.random_search_probability:
+            # 核心行为分支（基于配置概率 × 动量 × 抑制）
+            roll = random.random()
+            adj_enter = self.config.farm.enter_post_probability * momentum_boost * recency_penalty
+            adj_search = self.config.farm.random_search_probability
+            adj_profile = self.config.farm.visit_profile_probability
+
+            if roll < adj_search:
                 self._random_search()
-            elif roll < (self.config.farm.random_search_probability +
-                         self.config.farm.visit_profile_probability):
+                self._recent_actions.append("search")
+            elif roll < (adj_search + adj_profile):
                 self._visit_profile()
-            elif roll < (self.config.farm.random_search_probability +
-                         self.config.farm.visit_profile_probability +
-                         self.config.farm.enter_post_probability):
+                self._recent_actions.append("profile")
+            elif roll < (adj_search + adj_profile + adj_enter):
                 self._enter_and_interact()
+                # action type recorded inside _enter_and_interact
             else:
                 self._browse_feed()
+                self._recent_actions.append("browse")
+
+            # V9: 保持滑动窗口为最近 20 步
+            if len(self._recent_actions) > 20:
+                self._recent_actions = self._recent_actions[-20:]
 
         self._log_session_summary(time.time() - self.session_start_time)
 
@@ -169,7 +196,7 @@ class AccountFarmer:
             return
 
         self.stats["scrolls"] += 1
-        logger.info(f"Browse feed successful (scroll #{self.stats['scrolls']})")
+        logger.info(f"浏览信息流成功 (滑动 #{self.stats['scrolls']})")
 
         # 偶尔停下来"看"几秒（模拟真人扫视）
         if random.random() < 0.2:
@@ -209,7 +236,7 @@ class AccountFarmer:
             x = random.choice([int(w * 0.25), int(w * 0.75)])
             y = random.randint(int(h * 0.3), int(h * 0.8))
 
-        logger.info(f"Entering post at ({x}, {y}) [Anchor: '{anchor_text}']")
+        logger.info(f"进入帖子 ({x}, {y}) [锚点: '{anchor_text}']")
         self.driver.physical_tap(x, y)
         self.driver.human_sleep(3.0, 1.0)
         
@@ -244,7 +271,7 @@ class AccountFarmer:
             self.config.farm.read_duration_sigma
         ))
         
-        logger.info(f"Reading post for {total_sleep_time:.1f}s with attention simulation")
+        logger.info(f"阅读帖子 {total_sleep_time:.1f}秒 (带有注意力模拟)")
         elapsed = 0.0
         while elapsed < total_sleep_time:
             # 每次片段 2-4 秒
@@ -297,6 +324,16 @@ class AccountFarmer:
             logger.info("Farming: scrolling to view comments")
             self.driver.human_swipe("down")
             self.driver.human_sleep(5.0, 2.0)
+
+        # V9: 记录本次最高互动类型到滑动窗口
+        if self.stats["comments"] > 0 and random.random() < comment_prob:
+            self._recent_actions.append("comment")
+        elif liked:
+            self._recent_actions.append("like")
+        elif self.stats["collects"] > 0:
+            self._recent_actions.append("collect")
+        else:
+            self._recent_actions.append("enter")
 
         # 退出帖子，强制使用强大的 go_home 返回主瀑布流
         self.navigator.go_home()
@@ -518,13 +555,15 @@ class AccountFarmer:
             self.driver.human_sleep(1.0, 0.5)
 
             if self.config.device.typing_mode == "clipboard":
-                import subprocess
-                subprocess.run(self.driver.adb_prefix + ["shell", "am", "broadcast", "-a", "ADB_INPUT_TEXT", "--es", "msg", keyword], timeout=10)
+                # Stealth IME: fast input for search (no human delay needed)
+                self.driver.type_text(keyword, human_like=False)
             else:
                 self.keyboard.type_chinese(keyword)
-            # 提交搜索
-            import subprocess as _sp
-            _sp.run(self.driver.adb_prefix + ["shell", "input", "keyevent", "66"], timeout=5)
+            # 提交搜索 (通过 Stealth IME 的 EditorAction，避免 adb shell input keyevent 暴露)
+            if hasattr(self.driver, 'ime_client') and self.driver.ime_client:
+                self.driver.ime_client.send_editor_action(3)  # IME_ACTION_SEARCH
+            else:
+                self.driver.inject_keyevent(66)  # Fallback: 通过 注入隧道
             # 等待搜索结果加载
             self.driver.human_sleep(3.0, 1.0)
             
@@ -565,11 +604,11 @@ class AccountFarmer:
     def _log_session_summary(self, elapsed: float):
         """输出养号会话统计"""
         logger.info(
-            f"Farming session complete ({int(elapsed)}s). "
-            f"Stats: scrolls={self.stats['scrolls']}, "
-            f"entered={self.stats['posts_entered']}, "
-            f"likes={self.stats['likes']}, "
-            f"collects={self.stats['collects']}, "
-            f"searches={self.stats['searches']}, "
-            f"profile_visits={self.stats['profile_visits']}"
+            f"养号会话完成 ({int(elapsed)}秒). "
+            f"统计: 滑动={self.stats['scrolls']}, "
+            f"进入帖子={self.stats['posts_entered']}, "
+            f"点赞={self.stats['likes']}, "
+            f"收藏={self.stats['collects']}, "
+            f"搜索={self.stats['searches']}, "
+            f"主页浏览={self.stats['profile_visits']}"
         )

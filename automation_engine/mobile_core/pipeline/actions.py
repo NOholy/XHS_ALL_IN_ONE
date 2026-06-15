@@ -260,7 +260,7 @@ class HumanSwipeAction(ActionProvider):
 
     def execute(self, spec, reco_result, anchors) -> bool:
         direction = spec.direction or "down"
-        logger.info(f"HumanSwipeAction: human_swipe('{direction}')")
+        logger.info(f"HumanSwipeAction: 真人滑动('{direction}')")
         self.driver.human_swipe(direction=direction)
         return True
 
@@ -305,17 +305,17 @@ class InputTextAction(ActionProvider):
         return True
 
     def _clipboard_input(self, text: str):
-        """通过 ADB broadcast 粘贴文本 (适用于中文)。"""
-        cmd = self.driver.adb_prefix + [
-            "shell", "am", "broadcast",
-            "-a", "ADB_INPUT_TEXT",
-            "--es", "msg", text,
-        ]
+        """通过 Stealth IME 输入文本（替代 ADB_INPUT_TEXT 广播）。"""
         try:
-            subprocess.run(cmd, timeout=10, capture_output=True)
+            if hasattr(self.driver, 'type_text'):
+                self.driver.type_text(text, human_like=False)
+            elif hasattr(self.driver, 'ime_client') and self.driver.ime_client:
+                self.driver.ime_client.type_text_fast(text)
+            else:
+                logger.error("No stealth input channel available for clipboard input")
             time.sleep(0.5)
         except Exception as e:
-            logger.error(f"Clipboard input 失败: {e}")
+            logger.error(f"Stealth IME input 失败: {e}")
 
 
 class ClipboardInputAction(ActionProvider):
@@ -336,13 +336,14 @@ class ClipboardInputAction(ActionProvider):
             return False
 
         logger.info(f"ClipboardInputAction: 粘贴文本 '{str(text)[:30]}...'")
-        cmd = self.driver.adb_prefix + [
-            "shell", "am", "broadcast",
-            "-a", "ADB_INPUT_TEXT",
-            "--es", "msg", str(text),
-        ]
         try:
-            subprocess.run(cmd, timeout=10, capture_output=True)
+            if hasattr(self.driver, 'type_text'):
+                self.driver.type_text(str(text), human_like=False)
+            elif hasattr(self.driver, 'ime_client') and self.driver.ime_client:
+                self.driver.ime_client.type_text_fast(str(text))
+            else:
+                logger.error("No stealth input channel available")
+                return False
             time.sleep(0.5)
             return True
         except Exception as e:
@@ -418,7 +419,7 @@ class LaunchAppAction(ActionProvider):
     def execute(self, spec, reco_result, anchors) -> bool:
         package = spec.package or "com.xingin.xhs"
         package = str(anchors.resolve(package))
-        logger.info(f"LaunchAppAction: ensure_app_foreground('{package}')")
+        logger.info(f"LaunchAppAction: 确保应用在前台运行('{package}')")
         self.driver.ensure_app_foreground(package_name=package)
         return True
 
@@ -782,22 +783,26 @@ class ActionRegistry:
         try:
             success = provider.execute(spec, reco_result, anchors)
         except Exception as e:
+            if e.__class__.__name__ == "PreconditionError":
+                logger.critical(f"前置条件不满足 ({e})。自动终止脚本。")
+                import os
+                os._exit(1)
             logger.error(
                 f"ActionRegistry: {action_type.value} 执行异常: {e}",
                 exc_info=True,
             )
             success = False
 
-        # 失败时尝试 fallback keyevent 兜底
+        # 失败时尝试 fallback keyevent 兜底（通过 注入隧道）
         if not success and spec.fallback_keyevent is not None:
             logger.warning(
                 f"ActionRegistry: 主动作失败，执行 fallback_keyevent={spec.fallback_keyevent}"
             )
             try:
-                cmd = self.driver.adb_prefix + [
-                    "shell", "input", "keyevent", str(spec.fallback_keyevent)
-                ]
-                subprocess.run(cmd, timeout=5, capture_output=True)
+                if hasattr(self.driver, 'inject_keyevent'):
+                    self.driver.inject_keyevent(spec.fallback_keyevent)
+                else:
+                    logger.error("Driver has no inject_keyevent method, cannot execute fallback")
                 success = True  # 兜底视为成功
             except Exception as e:
                 logger.error(f"Fallback keyevent 也失败: {e}")
