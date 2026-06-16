@@ -124,16 +124,32 @@ def action_farm(config):
 
 
 def action_intercept(config):
-    """话题搜索评论截流 (已迁移至 Pipeline 引擎)"""
-    logger.info("Starting Intercept Pipeline...")
-    keywords = config.intercept.keywords
-    for keyword in keywords:
-        logger.info(f"Intercepting keyword: {keyword}")
-        action_pipeline(
-            config, 
-            pipeline_path="intercept_comment", 
-            context={"current_keyword": keyword}
+    """话题搜索评论截流"""
+    if getattr(config.intercept, "version", "v1") == "v2":
+        logger.info("Starting Intercept V2 (Natural Browsing)...")
+        components = _build_components(config)
+        from flows.intercept_flow_v2 import InterceptV2Orchestrator
+        orchestrator = InterceptV2Orchestrator(
+            navigator=components["navigator"],
+            searcher=components["searcher"],
+            reader=components["reader"],
+            commenter=components["commenter"],
+            farmer=components["farmer"],
+            driver=components["driver"],
+            config=config,
+            watchdog=components["watchdog"]
         )
+        orchestrator.run()
+    else:
+        logger.info("Starting Intercept Pipeline (V1)...")
+        keywords = config.intercept.keywords
+        for keyword in keywords:
+            logger.info(f"Intercepting keyword: {keyword}")
+            action_pipeline(
+                config, 
+                pipeline_path="intercept_comment", 
+                context={"current_keyword": keyword}
+            )
 
 
 def _check_active_hours(config) -> bool:

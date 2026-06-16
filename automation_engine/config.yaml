@@ -126,6 +126,14 @@ intercept:
   enable_dedup: true
   dedup_record_file: ""           # 空=自动(data/commented_posts.json)
 
+  # ========== V2 自然浏览式截流 ==========
+  version: "v2"                   # "v1"=旧版, "v2"=新版
+  v2_non_target_browse_probability: 0.30
+  v2_non_target_like_probability: 0.10
+  v2_non_target_collect_probability: 0.03
+  v2_home_harvest_enabled: true
+  v2_home_harvest_duration_minutes: 20
+
 schedule:
   enabled: false
   active_hours_start: 8

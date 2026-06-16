@@ -9,8 +9,10 @@ import random
 import re
 import time
 import requests
+import datetime
 from .logger import get_logger
 from .ocr_client import OCRClient
+from .exceptions import RiskControlTriggered
 
 logger = get_logger("commenter")
 
@@ -30,6 +32,8 @@ class SmartCommenter:
         self.keyboard = keyboard
         self.config = config
         self.daily_comment_count = 0
+        self.consecutive_shadowbans = 0
+        self._load_quota()
         self._commented_posts = set()
         self._load_dedup_records()
         # 会话级评论历史（借鉴 ApkClaw 的消息列表累积 + 上下文压缩）
@@ -266,9 +270,15 @@ class SmartCommenter:
 
         if success:
             self.daily_comment_count += 1
+            self.consecutive_shadowbans = 0
+            self._save_quota()
             logger.info(f"Comment posted! Daily count: {self.daily_comment_count}")
         else:
-            logger.warning("Comment may not have posted (shadowban or network issue)")
+            self.consecutive_shadowbans += 1
+            logger.warning(f"Comment may not have posted. Consecutive shadowbans: {self.consecutive_shadowbans}")
+            if self.consecutive_shadowbans >= 3:
+                logger.error("Triggered SHADOWBAN fuse (3 consecutive swallowed comments)!")
+                raise RiskControlTriggered("Shadowban detected (comments swallowed).")
 
         # W6: 对数正态冷却 (均匀分布容易被统计检验识别)
         import numpy as np
@@ -285,16 +295,29 @@ class SmartCommenter:
         return success
 
     def _verify_comment(self, text: str) -> bool:
-        """OCR 验证刚发送的评论是否出现在屏幕上"""
-        img = self.driver.screenshot()
-        try:
-            ocr_results = self.ocr.ocr_image(img)
-            check_str = text[:4]  # 检查前4个字符
-            for _, ocr_text, conf in OCRClient.safe_parse_results(ocr_results):
-                if check_str in ocr_text:
-                    return True
-        except Exception as e:
-            logger.error(f"Comment verification OCR failed: {e}")
+        """OCR 验证刚发送的评论是否出现在屏幕上 (支持重试和核心词匹配)"""
+        # 提取核心词（去标点，取中间长于4的部分，避开开头的随机前缀）
+        core_text = re.sub(r'[^\w\u4e00-\u9fa5]', '', text)
+        if len(core_text) > 4:
+            start = len(core_text) // 4
+            check_str = core_text[start:start+6]
+        else:
+            check_str = text[:4]
+
+        for attempt in range(3):
+            img = self.driver.screenshot()
+            try:
+                ocr_results = self.ocr.ocr_image(img)
+                for _, ocr_text, conf in OCRClient.safe_parse_results(ocr_results):
+                    if check_str in ocr_text:
+                        return True
+            except Exception as e:
+                logger.error(f"Comment verification OCR failed: {e}")
+            
+            if attempt < 2:
+                logger.info(f"Comment '{check_str}' not found on attempt {attempt+1}, retrying...")
+                self.driver.human_sleep(2.0, 0.5)
+                
         return False
 
     # --- 配额与去重 ---
@@ -314,9 +337,34 @@ class SmartCommenter:
             return False
         return post_id in self._commented_posts
 
-    def record_commented(self, post_id: str):
+    def check_duplicate_fuzzy(self, title: str) -> bool:
+        """根据标题进行模糊去重检查（进贴前拦截）"""
+        if not self.config.intercept.enable_dedup or not title:
+            return False
+            
+        norm_title = re.sub(r'[^\w\u4e00-\u9fa5]', '', title)
+        if len(norm_title) < 5:
+            return False
+            
+        for record in self._commented_posts:
+            if record.startswith("fuzzy_"):
+                history_title = record[6:]
+                # 计算 Jaccard 相似度
+                set1, set2 = set(norm_title), set(history_title)
+                if not set1 or not set2:
+                    continue
+                similarity = len(set1 & set2) / len(set1 | set2)
+                if similarity > 0.8:
+                    return True
+        return False
+
+    def record_commented(self, post_id: str, title: str = None):
         """记录已评论帖子"""
         self._commented_posts.add(post_id)
+        if title:
+            norm_title = re.sub(r'[^\w\u4e00-\u9fa5]', '', title)
+            if len(norm_title) >= 5:
+                self._commented_posts.add(f"fuzzy_{norm_title}")
         self._save_dedup_records()
 
     def _load_dedup_records(self):
@@ -337,3 +385,33 @@ class SmartCommenter:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:
                 json.dump(list(self._commented_posts), f)
+
+    def _get_quota_file_path(self):
+        return os.path.join("data", "daily_quota.json")
+
+    def _load_quota(self):
+        """加载每日配额记录"""
+        path = self._get_quota_file_path()
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        if os.path.exists(path):
+            try:
+                with open(path, "r") as f:
+                    data = json.load(f)
+                if data.get("date") == today:
+                    self.daily_comment_count = data.get("comment_count", 0)
+                    logger.info(f"Loaded daily quota: {self.daily_comment_count}")
+                else:
+                    self.daily_comment_count = 0
+            except Exception:
+                self.daily_comment_count = 0
+
+    def _save_quota(self):
+        """保存每日配额记录"""
+        path = self._get_quota_file_path()
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            with open(path, "w") as f:
+                json.dump({"date": today, "comment_count": self.daily_comment_count}, f)
+        except Exception as e:
+            logger.error(f"Failed to save quota: {e}")

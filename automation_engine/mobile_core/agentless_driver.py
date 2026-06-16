@@ -12,6 +12,7 @@ import numpy as np
 import subprocess
 import cv2
 import os
+import atexit
 from .logger import get_logger
 
 class InjectorError(Exception):
@@ -71,6 +72,29 @@ class AgentlessMinitouchDriver:
         # Stealth IME client for text input
         from .stealth_ime_client import StealthIMEClient
         self._ime_client = StealthIMEClient(serial=serial)
+
+        # Mask battery state on startup, restore on exit
+        self._mask_battery()
+        atexit.register(self._restore_battery)
+        atexit.register(self._cleanup_touch_injector)
+
+    def _mask_battery(self):
+        """Mask battery state to avoid 100% + USB plugged fingerprint."""
+        try:
+            fake_level = random.randint(45, 85)
+            subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "unplug"], capture_output=True, timeout=3)
+            subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "set", "level", str(fake_level)], capture_output=True, timeout=3)
+            logger.info(f"Battery state spoofed to: unplugged, level {fake_level}%")
+        except Exception as e:
+            logger.warning(f"Failed to mask battery: {e}")
+
+    def _restore_battery(self):
+        """Restore physical battery state."""
+        try:
+            subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "reset"], capture_output=True, timeout=3)
+            logger.info("Battery state restored.")
+        except Exception as e:
+            logger.warning(f"Failed to restore battery: {e}")
 
     def _check_connection(self):
         result = subprocess.run(self.adb_prefix + ["get-state"], capture_output=True, text=True)
@@ -235,12 +259,6 @@ class AgentlessMinitouchDriver:
                     f"sensor={self._sensor_strategy}({'active' if self._sensor_active else 'inactive'})"
                 )
                 
-                # Round 4: Mask battery state to avoid 100% + USB plugged fingerprint
-                fake_level = random.randint(45, 85)
-                subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "unplug"], capture_output=True)
-                subprocess.run(self.adb_prefix + ["shell", "dumpsys", "battery", "set", "level", str(fake_level)], capture_output=True)
-                logger.info(f"Battery state spoofed to: unplugged, level {fake_level}%")
-                
                 # V11: dex 已加载到内存, 立即删除文件避免残留指纹
                 subprocess.run(
                     self.adb_prefix + ["shell", "rm", "-f", _INJECTOR_DEX_REMOTE],
@@ -275,11 +293,6 @@ class AgentlessMinitouchDriver:
             pass
         finally:
             self._touch_available = False
-            # Round 4: Restore battery state
-            subprocess.run(
-                self.adb_prefix + ["shell", "dumpsys", "battery", "reset"],
-                capture_output=True, timeout=3
-            )
         self._touch_available = False
 
     def _find_free_port(self) -> int:

@@ -220,6 +220,14 @@ class InterceptConfig:
     enable_dedup: bool = True
     dedup_record_file: str = ""          # 空则自动计算
 
+    # ========== V2 自然浏览式截流 ==========
+    version: str = "v2"
+    v2_non_target_browse_probability: float = 0.30
+    v2_non_target_like_probability: float = 0.10
+    v2_non_target_collect_probability: float = 0.03
+    v2_home_harvest_enabled: bool = True
+    v2_home_harvest_duration_minutes: int = 20
+
 
 @dataclass
 class ScheduleConfig:

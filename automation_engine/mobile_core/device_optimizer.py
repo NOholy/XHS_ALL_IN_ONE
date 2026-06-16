@@ -1,5 +1,6 @@
 import subprocess
 import time
+import atexit
 from .logger import get_logger
 
 logger = get_logger("device_optimizer")
@@ -7,6 +8,8 @@ logger = get_logger("device_optimizer")
 class DeviceOptimizer:
     def __init__(self, serial=None):
         self.adb_prefix = ["adb"] if not serial else ["adb", "-s", serial]
+        self._original_screen_timeout = None
+        self._screen_atexit_registered = False
 
     def disable_all_animations(self):
         """
@@ -251,8 +254,36 @@ class DeviceOptimizer:
         注意: stayon 通常只在连接 USB 时生效，电池模式下可能不生效。
         """
         logger.info("Setting screen timeout to maximum to prevent sleep... (Note: stayon works mostly while charging)")
+        
+        if not self._screen_atexit_registered:
+            try:
+                res = subprocess.run(self.adb_prefix + ["shell", "settings", "get", "system", "screen_off_timeout"], capture_output=True, text=True, timeout=5)
+                val = res.stdout.strip()
+                if val and val.isdigit():
+                    self._original_screen_timeout = val
+                    logger.info(f"Original screen timeout saved: {self._original_screen_timeout} ms")
+            except Exception as e:
+                logger.warning(f"Failed to read original screen timeout: {e}")
+            
+            atexit.register(self._restore_screen_timeout)
+            self._screen_atexit_registered = True
+
         subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "screen_off_timeout", "1800000"], timeout=10)  # 30 mins
         subprocess.run(self.adb_prefix + ["shell", "svc", "power", "stayon", "true"], timeout=10)
+        
+    def _restore_screen_timeout(self):
+        """
+        恢复原本的屏幕休眠时间和常亮设置
+        """
+        try:
+            if self._original_screen_timeout:
+                subprocess.run(self.adb_prefix + ["shell", "settings", "put", "system", "screen_off_timeout", self._original_screen_timeout], timeout=10)
+                logger.info(f"Screen timeout restored to {self._original_screen_timeout} ms.")
+            
+            subprocess.run(self.adb_prefix + ["shell", "svc", "power", "stayon", "false"], timeout=10)
+            logger.info("Screen stayon disabled.")
+        except Exception as e:
+            logger.warning(f"Failed to restore screen settings on exit: {e}")
         
     def clear_app_data(self, package_name="com.xingin.xhs"):
         """
