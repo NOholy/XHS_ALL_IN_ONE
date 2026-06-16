@@ -198,6 +198,37 @@ class TapAction(ActionProvider):
         return True
 
 
+class SafeTapAction(ActionProvider):
+    """
+    YOLO + Anchor 防风控安全点击 (SAFE_TAP)。
+    自动兼容平台 UI 灰度测试。
+    """
+
+    def __init__(self, driver: AgentlessMinitouchDriver):
+        self.driver = driver
+
+    def execute(self, spec, reco_result, anchors) -> bool:
+        yolo_class = anchors.resolve(spec.yolo_class) if spec.yolo_class else None
+        if not yolo_class:
+            logger.error("SafeTapAction: 必须指定 yolo_class")
+            return False
+
+        fallback_anchor = anchors.resolve(spec.fallback_anchor) if spec.fallback_anchor else None
+        
+        offset_x = spec.safe_offset[0] if spec.safe_offset and len(spec.safe_offset) >= 1 else 0
+        offset_y = spec.safe_offset[1] if spec.safe_offset and len(spec.safe_offset) >= 2 else 0
+
+        logger.info(f"SafeTapAction: safe_click_yolo(target='{yolo_class}', fallback='{fallback_anchor}', offset=({offset_x},{offset_y}))")
+        
+        success = self.driver.safe_click_yolo(
+            class_name=str(yolo_class),
+            fallback_anchor_class=str(fallback_anchor) if fallback_anchor else None,
+            offset_x=int(offset_x),
+            offset_y=int(offset_y)
+        )
+        return success
+
+
 class DoubleTapAction(ActionProvider):
     """
     双击操作 (DOUBLE_TAP) — 常用于点赞。
@@ -721,6 +752,7 @@ class ActionRegistry:
         self._providers: dict[ActionType, ActionProvider] = {
             ActionType.DO_NOTHING: DoNothingAction(),
             ActionType.TAP: TapAction(driver),
+            ActionType.SAFE_TAP: SafeTapAction(driver),
             ActionType.DOUBLE_TAP: DoubleTapAction(driver),
             ActionType.SWIPE: SwipeAction(driver),
             ActionType.HUMAN_SWIPE: HumanSwipeAction(driver),

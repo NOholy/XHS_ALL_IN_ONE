@@ -247,22 +247,38 @@ class SmartCommenter:
 
         # 真实发送
         logger.info("LIVE MODE: Clicking Send...")
-        img = self.driver.screenshot()
-        send_btn = self.vision.find_template(img, "send_button", threshold=0.75)
-        if not send_btn:
-            # OCR Fallback
-            matches = self.ocr.find_text(img, "发送", conf_threshold=0.7)
-            if not matches:
-                matches = self.ocr.find_text(img, "发布", conf_threshold=0.7)
-            if matches:
-                send_btn = matches[0]
+        
+        if hasattr(self.driver, 'safe_click_yolo'):
+            # YOLO + Anchor 防风控安全点击
+            success = self.driver.safe_click_yolo(
+                class_name="send_btn", 
+                fallback_anchor_class="input_area", 
+                offset_x=120, 
+                offset_y=0
+            )
+            if not success:
+                logger.error("Could not find send button via YOLO or anchor!")
+                self.driver.press_back()
+                return False
+        else:
+            # Fallback to old behavior if driver doesn't support YOLO
+            img = self.driver.screenshot()
+            send_btn = self.vision.find_template(img, "send_button", threshold=0.75)
+            if not send_btn:
+                # OCR Fallback
+                matches = self.ocr.find_text(img, "发送", conf_threshold=0.7)
+                if not matches:
+                    matches = self.ocr.find_text(img, "发布", conf_threshold=0.7)
+                if matches:
+                    send_btn = matches[0]
 
-        if not send_btn:
-            logger.error("Could not find send button!")
-            self.driver.press_back()
-            return False
+            if not send_btn:
+                logger.error("Could not find send button!")
+                self.driver.press_back()
+                return False
 
-        self.driver.physical_tap(send_btn['x'], send_btn['y'])
+            self.driver.physical_tap(send_btn['x'], send_btn['y'])
+
         self.driver.human_sleep(4.0, 1.0)
 
         # OCR 验证评论是否上墙

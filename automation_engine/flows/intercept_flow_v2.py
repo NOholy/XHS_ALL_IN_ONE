@@ -7,6 +7,7 @@
 import random
 import time
 import hashlib
+import re
 from mobile_core.logger import get_logger
 from mobile_core.exceptions import RiskControlTriggered, PopupIntercepted
 

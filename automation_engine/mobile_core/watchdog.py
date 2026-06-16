@@ -122,6 +122,16 @@ class PopupWatchdog:
         Takes a screenshot and checks for popups.
         Catches PopupIntercepted to allow the flow to continue.
         """
+        # First, try YOLO to find and securely click 'close_btn' or 'skip_btn'
+        if hasattr(self.driver, 'safe_click_yolo'):
+            if self.driver.safe_click_yolo("close_btn"):
+                logger.info("Watchdog auto-handled popup via YOLO: close_btn")
+                return
+            if self.driver.safe_click_yolo("skip_btn"):
+                logger.info("Watchdog auto-handled popup via YOLO: skip_btn")
+                return
+
+        # Fallback to Activity / OCR detection
         img = self.driver.screenshot()
         try:
             self.check_screen(img)

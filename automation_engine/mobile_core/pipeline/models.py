@@ -49,6 +49,7 @@ class ActionType(str, Enum):
     """
     DO_NOTHING = "do_nothing"              # 空操作 (仅识别不执行)
     TAP = "tap"                            # 单击
+    SAFE_TAP = "safe_tap"                  # YOLO + Anchor 防风控安全点击
     DOUBLE_TAP = "double_tap"              # 双击 (点赞)
     SWIPE = "swipe"                        # 精确滑动
     HUMAN_SWIPE = "human_swipe"            # 人性化滑动 (贝塞尔 + 惯性)
@@ -164,6 +165,16 @@ class ActionSpec:
 
     noise: int = 15
     """Fitts 定律噪声像素范围 (±noise)。"""
+
+    # --- Safe Tap ---
+    yolo_class: Optional[str] = None
+    """YOLO 目标类名 (如 'send_btn')。"""
+    
+    fallback_anchor: Optional[str] = None
+    """兜底锚点类名 (如 'input_area')。"""
+    
+    safe_offset: Optional[List[int]] = None
+    """锚点偏移量 [dx, dy]。"""
 
     # --- Swipe / HumanSwipe ---
     direction: Optional[str] = None

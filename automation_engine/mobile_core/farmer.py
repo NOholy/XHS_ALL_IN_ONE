@@ -402,16 +402,19 @@ class AccountFarmer:
         cx = int(w / 2)
         cy = int(h / 2)
 
-        logger.info(f"Double tap liking post at center ({cx}, {cy})")
-        
         img_before = self.driver.screenshot()
         
-        if hasattr(self.driver, 'physical_double_tap'):
-            self.driver.physical_double_tap(cx, cy)
+        if hasattr(self.driver, 'safe_click_yolo'):
+            logger.info("Liking post via YOLO safe click")
+            self.driver.safe_click_yolo("like_icon", fallback_anchor_class="input_area", offset_x=60)
         else:
-            self.driver.physical_tap(cx, cy)
-            time.sleep(0.1)
-            self.driver.physical_tap(cx, cy)
+            logger.info(f"Double tap liking post at center ({cx}, {cy})")
+            if hasattr(self.driver, 'physical_double_tap'):
+                self.driver.physical_double_tap(cx, cy)
+            else:
+                self.driver.physical_tap(cx, cy)
+                time.sleep(0.1)
+                self.driver.physical_tap(cx, cy)
 
         self.driver.human_sleep(1.0, 0.5)
         img_after = self.driver.screenshot()
@@ -460,8 +463,12 @@ class AccountFarmer:
             
             box = (max(0, cx - 40), max(0, cy - 40), 80, 80)
             
-            logger.info(f"Collecting post at ({cx}, {cy})")
-            self.driver.physical_tap(cx, cy)
+            if hasattr(self.driver, 'safe_click_yolo'):
+                logger.info("Collecting post via YOLO safe click")
+                self.driver.safe_click_yolo("collect_icon", fallback_anchor_class="input_area", offset_x=100)
+            else:
+                logger.info(f"Collecting post at ({cx}, {cy})")
+                self.driver.physical_tap(cx, cy)
             
             self.driver.human_sleep(1.5, 0.5)
             img_after = self.driver.screenshot()
@@ -480,6 +487,22 @@ class AccountFarmer:
     def _try_follow(self):
         """尝试关注作者"""
         img = self.driver.screenshot()
+        
+        if hasattr(self.driver, 'safe_click_yolo'):
+            logger.info("Following author via YOLO safe click")
+            self.driver.safe_click_yolo("follow_btn")
+            self.driver.human_sleep(2.0, 0.5)
+            # 强校验
+            img_after = self.driver.screenshot()
+            if self.ocr.find_text(img_after, "已关注", conf_threshold=0.7) or self.ocr.find_text(img_after, "互相关注", conf_threshold=0.7):
+                logger.info("Follow verification passed.")
+                self.stats.setdefault("follows", 0)
+                self.stats["follows"] += 1
+                self._save_record("follow")
+            else:
+                logger.warning("Follow verification ambiguous or failed.")
+            return
+
         matches = self.ocr.find_text(img, "关注", conf_threshold=0.7)
         for m in matches:
             if m['y'] < self.config.device.screen_height * 0.5: # 关注按钮通常在上半屏或者左下角

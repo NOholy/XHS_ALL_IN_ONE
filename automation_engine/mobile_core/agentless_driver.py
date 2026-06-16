@@ -38,11 +38,21 @@ class AgentlessMinitouchDriver:
     undetectable touch emulation, and 'adb exec-out screencap' for vision.
     """
 
-    def __init__(self, serial=None):
+    def __init__(self, serial=None, yolo_model_path=None):
         self.serial = serial
         self.adb_prefix = ["adb"] if not serial else ["adb", "-s", serial]
         logger.info("Initializing Agentless Driver...", extra={"serial": serial})
         self._check_connection()
+
+        # YOLO Object Detection Model
+        self._yolo_model = None
+        if yolo_model_path:
+            try:
+                from ultralytics import YOLO
+                self._yolo_model = YOLO(yolo_model_path)
+                logger.info(f"Loaded YOLO model from {yolo_model_path}")
+            except Exception as e:
+                logger.error(f"Failed to load YOLO model: {e}")
 
         # injector state
         self._touch_process = None
@@ -471,13 +481,14 @@ class AgentlessMinitouchDriver:
 
     def physical_tap(self, x, y):
         """Physical tap with Fitts's law inspired noise. Uses 触控注入 exclusively."""
-        nx = int(x + random.randint(-15, 15))
-        ny = int(y + random.randint(-15, 15))
+        # 采用二维高斯(正态)分布，sigma=5 则 99.7% 的点击落在 [-15, 15] 范围内
+        nx = int(x + random.gauss(0, 5))
+        ny = int(y + random.gauss(0, 5))
 
         self.check_ready()
         mt_x, mt_y = self._scale_coords(nx, ny)
-        pressure = random.randint(40, 80)
-        touch_duration = random.uniform(0.04, 0.12)
+        pressure = int(max(10, random.gauss(60, 10)))
+        touch_duration = max(0.01, random.gauss(0.08, 0.02))
 
         logger.info(f"触控点击 ({nx}, {ny}) → mt({mt_x}, {mt_y})")
         self._touch_send(f"d 0 {mt_x} {mt_y} {pressure}")
@@ -488,14 +499,15 @@ class AgentlessMinitouchDriver:
 
     def physical_double_tap(self, x, y):
         """Physical double tap. Uses 触控注入 exclusively. Extremely useful for liking posts."""
-        nx = int(x + random.randint(-15, 15))
-        ny = int(y + random.randint(-15, 15))
+        # 采用二维高斯(正态)分布，sigma=5 则 99.7% 的点击落在 [-15, 15] 范围内
+        nx = int(x + random.gauss(0, 5))
+        ny = int(y + random.gauss(0, 5))
 
         self.check_ready()
         mt_x, mt_y = self._scale_coords(nx, ny)
 
         logger.info(f"触控双击 ({nx}, {ny}) → mt({mt_x}, {mt_y})")
-        pressure1 = random.randint(40, 70)
+        pressure1 = int(max(10, random.gauss(55, 10)))
         
         # First tap
         self._touch_send(f"d 0 {mt_x} {mt_y} {pressure1}")
@@ -506,10 +518,10 @@ class AgentlessMinitouchDriver:
         
         time.sleep(random.uniform(0.06, 0.12)) # Short delay between taps
         
-        # V8: 第二击加微偏移 (模拟拇指回弹)
-        mt_x2 = mt_x + random.randint(-8, 8)
-        mt_y2 = mt_y + random.randint(-8, 8)
-        pressure2 = pressure1 + random.randint(-15, 15)
+        # V8: 第二击加微偏移 (模拟拇指回弹) 使用高斯分布
+        mt_x2 = mt_x + int(random.gauss(0, 3))
+        mt_y2 = mt_y + int(random.gauss(0, 3))
+        pressure2 = pressure1 + int(random.gauss(0, 5))
         self._touch_send(f"d 0 {mt_x2} {mt_y2} {max(20, pressure2)}")
         self._touch_send("c")
         time.sleep(random.uniform(0.03, 0.07))
@@ -521,7 +533,7 @@ class AgentlessMinitouchDriver:
         self.check_ready()
         num_points = random.randint(25, 40)
         points = self._generate_cubic_bezier_curve(sx, sy, ex, ey, num_points)
-        pressure = random.randint(40, 80)
+        pressure = int(max(10, random.gauss(60, 10)))
 
         logger.info(f"贝塞尔曲线滑动: 从 ({sx},{sy}) 到 ({ex},{ey}), 共 {num_points} 个点")
         mt_x, mt_y = self._scale_coords(points[0][0], points[0][1])
@@ -555,8 +567,8 @@ class AgentlessMinitouchDriver:
         for t in np.linspace(0, 1, num_points):
             x = (1 - t)**3 * start_x + 3 * (1 - t)**2 * t * ctrl1_x + 3 * (1 - t) * t**2 * ctrl2_x + t**3 * end_x
             y = (1 - t)**3 * start_y + 3 * (1 - t)**2 * t * ctrl1_y + 3 * (1 - t) * t**2 * ctrl2_y + t**3 * end_y
-            jitter_x = random.uniform(-2, 2)
-            jitter_y = random.uniform(-2, 2)
+            jitter_x = random.gauss(0, 1)
+            jitter_y = random.gauss(0, 1)
             points.append((int(x + jitter_x), int(y + jitter_y)))
         return points
 
@@ -579,7 +591,7 @@ class AgentlessMinitouchDriver:
         self.check_ready()
         num_points = random.randint(8, 15)
         points = self._generate_cubic_bezier_curve(sx, sy, ex, ey, num_points)
-        pressure = random.randint(30, 60)
+        pressure = int(max(10, random.gauss(45, 10)))
 
         mt_x, mt_y = self._scale_coords(points[0][0], points[0][1])
         self._touch_send(f"d 0 {mt_x} {mt_y} {pressure}")
@@ -663,6 +675,105 @@ class AgentlessMinitouchDriver:
     def clear_input(self):
         """Clear the current input field via Stealth IME."""
         self._ime_client.clear_text()
+
+    # ─────────── YOLO & Anti-Detection Safe Clicks ───────────
+
+    def yolo_detect(self, class_name: str, screen_image: np.ndarray = None, conf_threshold: float = 0.5):
+        """
+        Runs YOLO object detection on the screen to find a specific class.
+        
+        Args:
+            class_name: The name of the class to detect (e.g., 'send_btn', 'input_area').
+            screen_image: Optional image. If None, uses cached screenshot.
+            conf_threshold: Minimum confidence to consider a match.
+            
+        Returns:
+            Tuple of (bounding_box, confidence) where bounding_box is (x1, y1, x2, y2).
+            Returns (None, 0.0) if not found.
+        """
+        if self._yolo_model is None:
+            logger.error("YOLO model is not initialized. Pass yolo_model_path to AgentlessMinitouchDriver.")
+            return None, 0.0
+            
+        img = screen_image if screen_image is not None else self.screenshot()
+        if img is None:
+            return None, 0.0
+            
+        # Run inference
+        results = self._yolo_model(img, verbose=False)
+        if not results:
+            return None, 0.0
+            
+        best_box = None
+        best_conf = 0.0
+        
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                cls_idx = int(box.cls[0].item())
+                detected_class = result.names[cls_idx]
+                conf = box.conf[0].item()
+                
+                if detected_class == class_name and conf >= conf_threshold:
+                    if conf > best_conf:
+                        best_conf = conf
+                        x1, y1, x2, y2 = box.xyxy[0].tolist()
+                        best_box = (int(x1), int(y1), int(x2), int(y2))
+                        
+        if best_box:
+            logger.info(f"YOLO detected '{class_name}' at {best_box} with conf {best_conf:.2f}")
+        else:
+            logger.debug(f"YOLO could not detect '{class_name}' above conf {conf_threshold}")
+            
+        return best_box, best_conf
+
+    def safe_click_yolo(self, class_name: str, fallback_anchor_class: str = None, offset_x: int = 0, offset_y: int = 0):
+        """
+        Anti-detection safe click using YOLO. 
+        Resistant to A/B testing visual changes, gracefully falls back to anchor points, 
+        and inherently uses Gaussian tap for risk control.
+        
+        Returns True if clicked successfully, False if manual intervention is needed.
+        """
+        img = self.screenshot()
+        target_box = None
+        
+        # 1. Try exact YOLO detection for the primary target
+        box, conf = self.yolo_detect(class_name, screen_image=img, conf_threshold=0.6)
+        if box:
+            target_box = box
+            logger.info(f"safe_click: YOLO primary target '{class_name}' found.")
+            
+        # 2. Try anchor fallback if primary target not found
+        elif fallback_anchor_class:
+            anchor_box, anchor_conf = self.yolo_detect(fallback_anchor_class, screen_image=img, conf_threshold=0.6)
+            if anchor_box:
+                # Calculate estimated area based on anchor center + offsets
+                ax1, ay1, ax2, ay2 = anchor_box
+                cx = (ax1 + ax2) // 2
+                cy = (ay1 + ay2) // 2
+                
+                est_cx = cx + offset_x
+                est_cy = cy + offset_y
+                # Assume a fixed size box for the estimated target (e.g., 60x60)
+                target_box = (est_cx - 30, est_cy - 30, est_cx + 30, est_cy + 30)
+                logger.info(f"safe_click: Primary failed. Using anchor '{fallback_anchor_class}' with offset. Est target: {target_box}")
+                
+        # 3. Fused Failsafe (Risk Control Trigger)
+        if not target_box:
+            logger.warning(f"CRITICAL: Visual link broken for '{class_name}'. A/B test or major UI change suspected. Action aborted to prevent risk control flags.")
+            return False
+            
+        # 4. Anti-detection Execution (Gaussian Tap inside target box)
+        x1, y1, x2, y2 = target_box
+        # Use center with slight randomness bounded by the box
+        center_x = (x1 + x2) // 2
+        center_y = (y1 + y2) // 2
+        
+        # We rely on physical_tap's built-in Fitts's law/Gaussian distribution, 
+        # but we pass the base center coordinates.
+        self.physical_tap(center_x, center_y)
+        return True
 
     def __del__(self):
         """Cleanup touch injector on driver destruction."""
