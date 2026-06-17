@@ -596,6 +596,16 @@ class PipelineLoader:
             spec.model = str(raw["model"])
         if "labels" in raw:
             spec.labels = self._ensure_list(raw["labels"])
+        if "yolo_class" in raw:
+            spec.yolo_class = str(raw["yolo_class"])
+        if "fallback_anchor" in raw:
+            spec.fallback_anchor = str(raw["fallback_anchor"])
+        if "safe_offset" in raw:
+            spec.safe_offset = self._as_int_list(raw["safe_offset"], "recognition.safe_offset")
+        if "ocr_text" in raw:
+            spec.ocr_text = str(raw["ocr_text"])
+        if "ocr_threshold" in raw:
+            spec.ocr_threshold = float(raw["ocr_threshold"])
 
         # Custom 参数
         if "handler" in raw:

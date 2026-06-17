@@ -9,6 +9,7 @@ device:
   screen_width: 0                 # 0=自动检测（初始化时 wm size 动态获取）
   screen_height: 0                # 0=自动检测（初始化时 wm size 动态获取）
   typing_mode: "vision"           # 强制使用纯视觉打字，避免暴露剪贴板 agent
+  yolo_model_path: "../yolov8s.pt" # YOLO 模型权重文件路径（必填，若文件不存在将直接报错停止运行）
   # 初始化开关
   auto_disable_animations: false  # 设为 false，保留正常系统动画以躲避风控检测
   auto_keep_screen_on: true

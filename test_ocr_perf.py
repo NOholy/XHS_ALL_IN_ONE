@@ -15,7 +15,7 @@ def create_synthetic_image(width=1080, height=1920):
 def test_performance():
     print("1. Initializing PaddleOCR (Cold Start)...")
     start = time.time()
-    ocr_engine = PaddleOCR(lang="ch")
+    ocr_engine = PaddleOCR(lang="ch", text_detection_model_name='PP-OCRv6_tiny_det', text_recognition_model_name='PP-OCRv6_tiny_rec')
     print(f"   Init took: {time.time() - start:.4f} seconds")
 
     print("\n2. Generating Synthetic UI Image (1080x1920)...")

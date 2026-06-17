@@ -1,6 +1,6 @@
 # 小红书 (XHS) 防风控交互式截流自动化架构设计 — v3.0
 
-> **v3.0 更新 (2026-05-20)**：移动端架构完成"去 Accessibility 化"重构，引入 PP-OCRv5 视觉引擎。本文档同步更新 Web 端 + 移动端的统一防风控架构。
+> **v3.0 更新 (2026-05-20)**：移动端架构完成"去 Accessibility 化"重构，引入 PP-OCRv6 视觉引擎。本文档同步更新 Web 端 + 移动端的统一防风控架构。
 
 ## 1. 架构概述 (Overview)
 
@@ -33,7 +33,7 @@
 
 *   **动作**：通过坐标点击进入目标帖子，使用 **PaddleOCR** 对截屏进行全文字识别，提取帖子正文和评论文本。
 *   **防风控策略**：
-    *   **纯视觉感知**：不再通过 `d(resourceIdMatches=...)` 等 API 查询 DOM 结构，改为 `self.ocr.ocr(screen_img)` 直接读取屏幕像素上的文字。
+    *   **纯视觉感知**：不再通过 `d(resourceIdMatches=...)` 等 API 查询 DOM 结构，改为 `self.ocr.ocr(screen_img)` 直接读取屏幕像素上的文字。**为了确保物理点击的 100% 坐标精准，严禁对喂给 OCR 的图片进行尺寸压缩。**
     *   **滚动拼接**：先截取主贴区域进行 OCR，再通过贝塞尔曲线物理滑动露出评论区，二次截屏做 OCR。两次识别结果合并为完整的帖子上下文。
     *   **模板匹配辅助**：同时使用 OpenCV `_find_template("reply_button")` 定位"回复"按钮坐标，供后续回帖使用。
 
@@ -78,6 +78,6 @@
 | 工具 | 路径 | 用途 |
 |---|---|---|
 | **主驱动** | `scripts/xhs_mobile_driver.py` | 移动端全功能自动化（scan/extract/reply/farm） |
-| **模板采集** | `scripts/auto_crop_templates.py` | PP-OCRv5 全自动 UI 模板裁剪流水线 |
+| **模板采集** | `scripts/auto_crop_templates.py` | PP-OCRv6 全自动 UI 模板裁剪流水线 |
 | **按钮模板** | `data/ui_templates/` | `send_button.png`, `reply_button.png`, `slider_puzzle.png` |
 | **键盘模板** | `data/keyboard/` | `a.png` ~ `z.png`（opencv 输入模式专用） |

@@ -126,6 +126,21 @@ class RecognitionSpec:
     labels: Optional[List[str]] = None
     """期望检测的标签列表。"""
 
+    yolo_class: Optional[str] = None
+    """YOLO 目标类名 (如 'send_btn')。"""
+
+    fallback_anchor: Optional[str] = None
+    """主目标未检出时的兜底锚点类名。"""
+
+    safe_offset: Optional[List[int]] = None
+    """锚点偏移量 [dx, dy]。"""
+
+    ocr_text: Optional[str] = None
+    """检测框内用于二次校验的 OCR 预期文本。"""
+
+    ocr_threshold: float = 0.6
+    """识别置信度阈值。OCR 默认 0.6。"""
+
     # --- Custom 参数 ---
     handler: Optional[str] = None
     """自定义识别函数的 Python 路径 (module.function)。"""

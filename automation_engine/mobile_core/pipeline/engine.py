@@ -529,7 +529,12 @@ class PipelineExecutor:
             ms = int(delay_spec)
 
         if ms > 0:
-            time.sleep(ms / 1000.0)
+            if self.driver:
+                sec = ms / 1000.0
+                sigma = min(sec * 0.15, 1.0)
+                self.driver.human_sleep(mu=sec, sigma=sigma)
+            else:
+                time.sleep(ms / 1000.0)
 
     def _wait_for_screen_freeze(self, duration_ms: int):
         """

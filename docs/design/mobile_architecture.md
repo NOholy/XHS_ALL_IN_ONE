@@ -2,11 +2,11 @@
 
 本文档定义了将 XHS 自动化从 Web 迁移至 Android 移动端（真机/云手机）的部署标准与架构设计。
 
-> **v3.0 更新 (2026-05-20)**：完成"去 Accessibility 化"重构，引入 PP-OCRv5 视觉引擎，彻底消除对 UI Tree 的依赖。
+> **v3.0 更新 (2026-05-20)**：完成"去 Accessibility 化"重构，引入 PP-OCRv6 视觉引擎，彻底消除对 UI Tree 的依赖。
 
 ## 1. 架构选型 (Framework Selection)
 
-基于 Python 后端开发生态，我们采用了 **`uiautomator2` + `opencv-python` + `PaddleOCR (PP-OCRv5)`** 的三轨混合架构。
+基于 Python 后端开发生态，我们采用了 **`uiautomator2` + `opencv-python` + `PaddleOCR (PP-OCRv6)`** 的三轨混合架构。
 
 ### 技术栈角色分工
 
@@ -43,7 +43,8 @@ element.info           # 读取 UI 节点属性
 ### 为什么引入 PaddleOCR？
 *   小红书已经开始对 UI 树的 `text` 属性进行混淆/抹除，导致传统的 `d(text="发送")` 完全失效。
 *   PaddleOCR 直接对屏幕截图进行像素级文字识别，无论 App 如何混淆底层数据结构，只要屏幕上**画着**文字，OCR 就能读出坐标和内容。
-*   PP-OCRv5 支持中英文混合，在 CPU 上推理速度极快（<200ms/帧），完全满足实时交互需求。
+*   PP-OCRv6_tiny 支持中英文混合，在 CPU 上推理速度极快（视硬件环境 <200ms~800ms/帧），完全满足实时交互需求。
+*   **坐标零误差**：严格禁止在送入 OCR 前对截屏进行缩放/压缩（即便分辨率高达 1080p）。因为物理触控驱动（`uiautomator2`）需要绝对精确的原生屏幕坐标，必须保持图像与屏幕像素的 1:1 映射。
 
 ## 2. 硬件与环境准备 (Environment Setup)
 
@@ -73,6 +74,7 @@ pip install uiautomator2 opencv-python pypinyin paddlepaddle paddleocr
 python scripts/auto_crop_templates.py
 ```
 产出文件存放于 `data/ui_templates/`（`send_button.png`, `reply_button.png` 等）。
+> **🚨 铁律：禁止模板缩放**：由于不同分辨率设备的 UI 比例不尽相同，我们严格禁止跨分辨率强行缩放旧模板。如果更换了新分辨率的测试机，系统会要求**重新采集**一套原生分辨率的锚点模板。
 
 ## 3. 执行流程 (Execution Flow)
 

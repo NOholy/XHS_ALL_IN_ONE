@@ -82,6 +82,11 @@ class AgentlessMinitouchDriver:
         # Stealth IME client for text input
         from .stealth_ime_client import StealthIMEClient
         self._ime_client = StealthIMEClient(serial=serial)
+        
+        # Enforce Stealth IME activation on driver init
+        logger.info("Enforcing Stealth IME activation...")
+        if not self._ime_client.ensure_ime_active():
+            raise PreconditionError("🚨 CRITICAL: Failed to activate Stealth IME. Aborting to protect account safety.")
 
         # Mask battery state on startup, restore on exit
         self._mask_battery()
@@ -269,6 +274,14 @@ class AgentlessMinitouchDriver:
                     f"sensor={self._sensor_strategy}({'active' if self._sensor_active else 'inactive'})"
                 )
                 
+                # Enforce sensor simulation condition
+                if self._sensor_mode != "off" and not self._sensor_active:
+                    self._cleanup_touch_injector()
+                    raise PreconditionError(
+                        f"🚨 CRITICAL: Sensor simulation failed to activate (strategy={self._sensor_strategy}). "
+                        f"This exposes automation to severe 'dead sensor' detection. Aborting."
+                    )
+
                 # V11: dex 已加载到内存, 立即删除文件避免残留指纹
                 subprocess.run(
                     self.adb_prefix + ["shell", "rm", "-f", _INJECTOR_DEX_REMOTE],

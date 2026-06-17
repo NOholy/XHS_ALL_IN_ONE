@@ -74,8 +74,14 @@ class InitOrchestrator:
         from mobile_core.ocr_client import OCRClient
         from mobile_core.watchdog import PopupWatchdog
 
-        from mobile_core.agentless_driver import AgentlessMinitouchDriver
-        driver = AgentlessMinitouchDriver(serial)
+        from mobile_core.agentless_driver import AgentlessMinitouchDriver, PreconditionError
+        try:
+            driver = AgentlessMinitouchDriver(serial)
+        except PreconditionError as e:
+            logger.error(f"Driver initialization failed: {e}")
+            report["success"] = False
+            report["steps"]["stealth_ime"] = f"FAILED: {e}"
+            return report
 
         ocr = OCRClient(self.config.ocr.endpoint)
         vision = VisionEngine(self.config.vision.templates_dir)
@@ -609,7 +615,7 @@ class InitOrchestrator:
             return False  # 未知异常不再假定已登录
 
     def _generate_watchdog_templates(self, base_templates_dir, serial, target_res, target_w, target_h):
-        """Generate watchdog popup templates by scaling from best available source resolution."""
+        """Check watchdog popup templates. Do NOT scale from other resolutions."""
         watchdog_templates = [
             "slider_puzzle", "security_verification", "account_frozen",
             "phone_bind", "frequent_operation", "btn_iknow",
@@ -629,53 +635,7 @@ class InitOrchestrator:
             logger.info("All watchdog templates already present.")
             return
 
-        # Find best source directory (the one with most watchdog templates)
-        best_source = None
-        best_count = 0
-
-        # Search all resolution dirs (skip device-specific subdirs, look for direct resolution dirs and inside device dirs)
-        for res_dir in glob.glob(os.path.join(base_templates_dir, "*", "*")) + glob.glob(os.path.join(base_templates_dir, "*")):
-            if not os.path.isdir(res_dir) or res_dir == target_dir:
-                continue
-            count = sum(1 for t in watchdog_templates if os.path.exists(os.path.join(res_dir, f"{t}.png")))
-            if count > best_count:
-                best_count = count
-                best_source = res_dir
-
-        if not best_source or best_count == 0:
-            logger.warning("No source watchdog templates found to scale from.")
-            return
-
-        # Parse source resolution from dir name
-        source_dirname = os.path.basename(best_source)
-        try:
-            src_w, src_h = map(int, source_dirname.split("x"))
-        except ValueError:
-            logger.warning(f"Cannot parse resolution from source dir: {source_dirname}")
-            return
-
-        scaled_count = 0
-        for template_name in missing:
-            src_path = os.path.join(best_source, f"{template_name}.png")
-            if not os.path.exists(src_path):
-                continue
-
-            src_img = cv2.imread(src_path)
-            if src_img is None:
-                continue
-
-            # Scale proportionally
-            scale_x = target_w / src_w
-            scale_y = target_h / src_h
-            new_w = max(1, int(src_img.shape[1] * scale_x))
-            new_h = max(1, int(src_img.shape[0] * scale_y))
-            scaled_img = cv2.resize(src_img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-
-            dst_path = os.path.join(target_dir, f"{template_name}.png")
-            cv2.imwrite(dst_path, scaled_img)
-            scaled_count += 1
-
-        logger.info(f"Generated {scaled_count}/{len(missing)} watchdog templates by scaling from {source_dirname}")
+        logger.warning(f"Missing watchdog templates: {missing}. Please provide new templates for resolution {target_res}.")
 
     def _load_device_profile(self, serial) -> dict:
         """加载设备的上一次初始化档案，用于幂等判断。"""

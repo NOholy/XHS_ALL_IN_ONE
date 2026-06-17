@@ -8,7 +8,7 @@ def test():
     print("1. Initializing PaddleOCR...", flush=True)
     start = time.time()
     import os
-    ocr_version = os.getenv("OCR_VERSION", "PP-OCRv4")
+    ocr_version = os.getenv("OCR_VERSION", "PP-OCRv6_tiny")
     ocr_engine = PaddleOCR(lang="ch", ocr_version=ocr_version)
     print(f"Init took: {time.time() - start:.4f} seconds", flush=True)
 

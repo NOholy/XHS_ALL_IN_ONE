@@ -24,11 +24,68 @@ logger = get_logger("main")
 def _build_driver(config):
     """根据配置构建设备驱动"""
     from mobile_core.agentless_driver import AgentlessMinitouchDriver
-    return AgentlessMinitouchDriver(config.device.serial)
+    
+    yolo_model_path = config.device.yolo_model_path
+    if not yolo_model_path:
+        raise ValueError("🚨 CRITICAL: config.device.yolo_model_path is not configured! YOLO model path is required.")
+        
+    abs_yolo_path = os.path.abspath(yolo_model_path)
+    if not os.path.exists(abs_yolo_path):
+        raise FileNotFoundError(f"🚨 CRITICAL: YOLO model file not found at: {abs_yolo_path}")
+
+    driver = AgentlessMinitouchDriver(config.device.serial, yolo_model_path=abs_yolo_path)
+    
+    # 传递传感器配置
+    if hasattr(config, "stealth") and hasattr(config.stealth, "sensor_mode"):
+        driver.set_sensor_mode(config.stealth.sensor_mode)
+        
+    return driver
+
+
+def enforce_preconditions(config):
+    """强制检查前置条件，保证在非 init 模式下也能安全运行"""
+    logger.info("Enforcing execution preconditions...")
+    import requests
+    import subprocess
+    
+    # 1. Check OCR Health
+    try:
+        session = requests.Session()
+        session.trust_env = False
+        health_url = config.ocr.endpoint.replace("/ocr", "/health")
+        res = session.get(health_url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            if not data.get("engine_ready"):
+                logger.error(f"🚨 CRITICAL: OCR engine not ready: {data}. Aborting.")
+                sys.exit(1)
+        else:
+            logger.error(f"🚨 CRITICAL: OCR service returned HTTP {res.status_code}. Aborting.")
+            sys.exit(1)
+    except Exception as e:
+        logger.error(f"🚨 CRITICAL: OCR service unreachable. Is ocr_server.py running? Error: {e}")
+        sys.exit(1)
+
+    # 2. Check XHS App Installation
+    adb_prefix = ["adb"] if not config.device.serial else ["adb", "-s", config.device.serial]
+    try:
+        result = subprocess.run(
+            adb_prefix + ["shell", "dumpsys", "package", "com.xingin.xhs"],
+            capture_output=True, text=True, timeout=10
+        )
+        if "versionName=" not in result.stdout:
+            logger.error("🚨 CRITICAL: XHS app not installed! Aborting.")
+            sys.exit(1)
+    except Exception as e:
+        logger.error(f"🚨 CRITICAL: Failed to check XHS app installation: {e}")
+        sys.exit(1)
 
 
 def _build_components(config):
     """构建所有核心组件"""
+    # 强制执行前置条件验证 (确保安全底线)
+    enforce_preconditions(config)
+    
     driver = _build_driver(config)
 
     from mobile_core.vision import VisionEngine
@@ -260,6 +317,7 @@ def action_pipeline(config, pipeline_path=None, context=None, override=None, ent
         vision=components["vision"],
         ocr=components["ocr"],
         page_detector=components["page_detector"],
+        driver=components["driver"],
         config=config,
     )
     action_registry = ActionRegistry(

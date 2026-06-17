@@ -40,6 +40,7 @@ if TYPE_CHECKING:
     from mobile_core.vision import VisionEngine
     from mobile_core.ocr_client import OCRClient
     from mobile_core.page_detector import LightPageDetector
+    from mobile_core.agentless_driver import AgentlessMinitouchDriver
 
 logger = get_logger("recognition")
 
@@ -247,10 +248,12 @@ class OCRTextProvider(RecognitionProvider):
         spec: RecognitionSpec,
         anchors: AnchorStore,
     ) -> Optional[RecognitionResult]:
-        if not spec.expected:
-            logger.warning("OCRTextProvider: spec.expected is empty")
+        expected = anchors.resolve(spec.expected) if spec.expected else None
+        if not expected:
+            logger.warning("OCRTextProvider: spec.expected resolved to empty or is missing")
             return None
-
+        
+        expected = str(expected)
         threshold = spec.threshold if spec.threshold > 0 else 0.6
 
         # 先检查缓存
@@ -274,11 +277,11 @@ class OCRTextProvider(RecognitionProvider):
                 ocr_cache["raw_results"] = raw_results
                 ocr_cache["parsed"] = parsed
 
-        # 编译正则模式 (spec.expected 可能是 "确认|取消|跳过" 这样的多选)
+        # 编译正则模式 (expected 可能是 "确认|取消|跳过" 这样的多选)
         try:
-            pattern = re.compile(spec.expected)
+            pattern = re.compile(expected)
         except re.error as e:
-            logger.error(f"OCRTextProvider: invalid regex '{spec.expected}': {e}")
+            logger.error(f"OCRTextProvider: invalid regex '{expected}': {e}")
             # 退化为子串匹配
             pattern = None
 
@@ -295,7 +298,7 @@ class OCRTextProvider(RecognitionProvider):
                 if not pattern.search(text):
                     continue
             else:
-                if spec.expected not in text:
+                if expected not in text:
                     continue
 
             # 计算中心坐标 (box 是四个顶点 [[x,y], ...])
@@ -479,14 +482,15 @@ class ActivityDetectProvider(RecognitionProvider):
         spec: RecognitionSpec,
         anchors: AnchorStore,
     ) -> Optional[RecognitionResult]:
-        if not spec.expected:
-            logger.warning("ActivityDetectProvider: spec.expected is empty")
+        expected = anchors.resolve(spec.expected) if spec.expected else None
+        if not expected:
+            logger.warning("ActivityDetectProvider: spec.expected resolved to empty or is missing")
             return None
 
-        expected = spec.expected.strip().lower()
+        expected_str = str(expected).strip().lower()
 
         # 特殊处理: 键盘可见性检测
-        if expected in ("keyboard_visible", "keyboard", "is_keyboard_visible"):
+        if expected_str in ("keyboard_visible", "keyboard", "is_keyboard_visible"):
             is_visible = self._detector.is_keyboard_visible()
             if is_visible:
                 h, w = screen.shape[:2]
@@ -503,10 +507,10 @@ class ActivityDetectProvider(RecognitionProvider):
 
         # 支持正则匹配或子串匹配
         try:
-            pattern = re.compile(expected)
+            pattern = re.compile(expected_str)
             matched = pattern.search(current_page) is not None
         except re.error:
-            matched = expected in current_page
+            matched = expected_str in current_page
 
         if matched:
             h, w = screen.shape[:2]
@@ -518,7 +522,7 @@ class ActivityDetectProvider(RecognitionProvider):
             )
 
         logger.debug(
-            f"ActivityDetect: expected='{expected}', "
+            f"ActivityDetect: expected='{expected_str}', "
             f"current='{current_page}', matched=False"
         )
         return None
@@ -695,11 +699,19 @@ class CustomProvider(RecognitionProvider):
 
 class YoloDetectProvider(RecognitionProvider):
     """
-    YOLO 目标检测 — 占位实现。
-
-    后续可集成 YOLOv8/ultralytics 推理。
-    当前返回 None (未实现)。
+    YOLO 目标检测 — 支持:
+      1. 纯 YOLO 目标定位 (例如找 点赞/收藏 图标)
+      2. YOLO + OCR 二次验证 (用于动态文本按钮，定位后裁剪检测框进行 OCR 确认)
+      3. Anchor 锚点兜底定位 (当目标不存在时，以另一个目标作为锚点偏移定位)
     """
+
+    def __init__(
+        self,
+        driver: Optional[AgentlessMinitouchDriver] = None,
+        ocr: Optional[OCRClient] = None,
+    ):
+        self._driver = driver
+        self._ocr = ocr
 
     def recognize(
         self,
@@ -707,10 +719,109 @@ class YoloDetectProvider(RecognitionProvider):
         spec: RecognitionSpec,
         anchors: AnchorStore,
     ) -> Optional[RecognitionResult]:
-        logger.warning(
-            "YoloDetectProvider is a placeholder — not yet implemented. "
-            f"model={spec.model}, labels={spec.labels}"
-        )
+        if self._driver is None:
+            raise RuntimeError("🚨 CRITICAL: YoloDetectProvider: driver is None. YOLO_DETECT cannot run.")
+
+        # 变量解析
+        yolo_class = anchors.resolve(spec.yolo_class) if spec.yolo_class else None
+        if not yolo_class:
+            raise ValueError("🚨 CRITICAL: YoloDetectProvider: 'yolo_class' must be specified in recognition spec.")
+
+        yolo_class = str(yolo_class)
+        fallback_anchor = anchors.resolve(spec.fallback_anchor) if spec.fallback_anchor else None
+        ocr_text = anchors.resolve(spec.ocr_text) if spec.ocr_text else None
+        
+        offset_x = spec.safe_offset[0] if spec.safe_offset and len(spec.safe_offset) >= 1 else 0
+        offset_y = spec.safe_offset[1] if spec.safe_offset and len(spec.safe_offset) >= 2 else 0
+
+        # 1. 尝试直接 YOLO 检测主目标
+        box, conf = self._driver.yolo_detect(yolo_class, screen_image=screen, conf_threshold=0.6)
+        
+        if box:
+            logger.info(f"YoloDetectProvider: YOLO primary target '{yolo_class}' found at {box} (conf={conf:.2f}).")
+            
+            # 如果配置了 OCR 二次验证，则进行裁剪和 OCR 识别
+            if ocr_text:
+                if self._ocr is None:
+                    raise RuntimeError("🚨 CRITICAL: YoloDetectProvider: OCR client not provided, cannot verify ocr_text")
+                
+                # 裁剪检测到的 YOLO 区域 (增加 10px 边距以确保边缘字符完整包含)
+                x1, y1, x2, y2 = box
+                h_img, w_img = screen.shape[:2]
+                padding = 10
+                x1 = max(0, min(x1 - padding, w_img - 1))
+                y1 = max(0, min(y1 - padding, h_img - 1))
+                x2 = max(1, min(x2 + padding, w_img))
+                y2 = max(1, min(y2 + padding, h_img))
+                
+                cropped_btn = screen[y1:y2, x1:x2]
+                
+                try:
+                    raw_ocr = self._ocr.ocr_image(cropped_btn)
+                    parsed_ocr = self._ocr.safe_parse_results(raw_ocr)
+                    # 拼接所有 OCR 文本
+                    combined_text = "".join([text for _, text, _ in parsed_ocr]).strip()
+                    logger.debug(f"YoloDetectProvider: OCR verifying cropped region: expected='{ocr_text}', got='{combined_text}'")
+                    
+                    # 匹配判断 (优先进行严格正则/子串匹配，若不匹配且非正则元字符，则尝试在清洗空格/标点后做子串匹配)
+                    matched = False
+                    try:
+                        pattern = re.compile(ocr_text)
+                        if pattern.search(combined_text):
+                            matched = True
+                    except Exception as e:
+                        logger.debug(f"YoloDetectProvider: regex compile error: {e}")
+                    
+                    if not matched:
+                        is_regex = any(char in ocr_text for char in "^$*+?|{}[]()\\")
+                        if not is_regex:
+                            cleaned_expected = re.sub(r'[^\w\u4e00-\u9fa5]', '', ocr_text).lower()
+                            cleaned_combined = re.sub(r'[^\w\u4e00-\u9fa5]', '', combined_text).lower()
+                            if cleaned_expected and cleaned_expected in cleaned_combined:
+                                matched = True
+                                
+                    if not matched:
+                        logger.info(f"YoloDetectProvider: OCR verification failed for '{ocr_text}' in '{combined_text}'")
+                        return None
+                    
+                    logger.info(f"YoloDetectProvider: OCR verification success for '{ocr_text}'")
+                except Exception as e:
+                    logger.error(f"YoloDetectProvider: OCR verification error: {e}")
+                    return None
+
+            # 返回坐标 (x_center, y_center) 和 bounding box
+            x1, y1, x2, y2 = box
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2
+            return RecognitionResult(
+                matched=True,
+                position=(cx, cy),
+                box=[x1, y1, x2 - x1, y2 - y1],
+                confidence=conf,
+            )
+
+        # 2. 如果主目标未找到且配置了 anchor 兜底，则检测 anchor
+        elif fallback_anchor:
+            fallback_anchor = str(fallback_anchor)
+            anchor_box, anchor_conf = self._driver.yolo_detect(fallback_anchor, screen_image=screen, conf_threshold=0.6)
+            if anchor_box:
+                ax1, ay1, ax2, ay2 = anchor_box
+                acx = (ax1 + ax2) // 2
+                acy = (ay1 + ay2) // 2
+                
+                est_cx = acx + offset_x
+                est_cy = acy + offset_y
+                
+                logger.info(f"YoloDetectProvider: Primary failed. Using anchor '{fallback_anchor}' with offset. Est target center: ({est_cx}, {est_cy})")
+                
+                return RecognitionResult(
+                    matched=True,
+                    position=(est_cx, est_cy),
+                    box=[est_cx - 30, est_cy - 30, 60, 60],
+                    confidence=anchor_conf,
+                )
+
+        logger.debug(f"YoloDetectProvider: target '{yolo_class}' not found.")
         return None
 
 
@@ -738,11 +849,13 @@ class RecognitionRegistry:
         vision: Optional[VisionEngine] = None,
         ocr: Optional[OCRClient] = None,
         page_detector: Optional[LightPageDetector] = None,
+        driver: Optional[AgentlessMinitouchDriver] = None,
         config: Any = None,
     ):
         self._vision = vision
         self._ocr = ocr
         self._page_detector = page_detector
+        self._driver = driver
         self._config = config
 
         # 注册所有 Provider
@@ -756,7 +869,12 @@ class RecognitionRegistry:
         self._providers[RecognitionType.DIRECT_HIT] = DirectHitProvider()
         self._providers[RecognitionType.COLOR_SHIFT] = ColorShiftProvider()
         self._providers[RecognitionType.CUSTOM] = CustomProvider()
-        self._providers[RecognitionType.YOLO_DETECT] = YoloDetectProvider()
+        
+        # YOLO 目标检测 (依赖 driver 和 ocr 进行二次匹配)
+        self._providers[RecognitionType.YOLO_DETECT] = YoloDetectProvider(
+            driver=self._driver,
+            ocr=self._ocr,
+        )
 
         # 依赖 VisionEngine
         if self._vision is not None:

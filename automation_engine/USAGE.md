@@ -77,7 +77,7 @@ python start_ocr_server.py
 OCR 微服务采用 **策略模式 (Strategy Pattern)** 设计，便于灵活插拔与扩展底层引擎。当前支持的 OCR 引擎类型包括：
 
 1. **PaddleOCR (默认)**：
-   - 默认加载 `PP-OCRv4` 中文轻量化模型（`lang="ch"`，首次启动会自动联网下载约 100MB 的模型权重文件）。
+   - 默认加载 `PP-OCRv6_tiny` 中文轻量化极速模型（等同于曾经的 mobile 版，`lang="ch"`，首次启动会自动联网下载约数十MB的模型权重文件）。
    - 自适应接口：针对 PaddleOCR 新版本自动调用高性能 `predict` 推理 API，对旧版本自动降级使用兼容的 `ocr` API。
 2. **Mock 引擎 (`MockOCREngine`)**：
    - 虚拟 OCR 引擎，用于开发调试、集成测试或在无 GPU/模型依赖的环境下快速跑通自动化流。
@@ -87,7 +87,7 @@ OCR 微服务采用 **策略模式 (Strategy Pattern)** 设计，便于灵活插
 你可以通过以下环境变量配置 OCR 服务的初始参数：
 - `OCR_ENGINE_TYPE`：引擎类型，可选 `paddle` 或 `mock`（默认 `paddle`）。
 - `OCR_LANG`：OCR 识别语言，默认 `ch`（中文）。
-- `OCR_VERSION`：PaddleOCR 模型版本，默认 `PP-OCRv4`。
+- `OCR_VERSION`：PaddleOCR 模型版本，默认 `PP-OCRv6_tiny`（如需更换可填 `PP-OCRv6_small`, `PP-OCRv6` 等）。
 
 #### 动态 API 与服务验证
 
@@ -100,7 +100,7 @@ OCR 微服务采用 **策略模式 (Strategy Pattern)** 设计，便于灵活插
     {
       "engine_type": "paddle",
       "lang": "ch",
-      "version": "PP-OCRv4"
+      "version": "PP-OCRv6_tiny"
     }
     ```
 

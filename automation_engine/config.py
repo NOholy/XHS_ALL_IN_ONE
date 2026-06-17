@@ -59,6 +59,7 @@ class DeviceConfig:
     screen_width: int = 1080
     screen_height: int = 1920
     typing_mode: str = "clipboard"       # "clipboard" | "opencv"
+    yolo_model_path: Optional[str] = "../yolov8s.pt" # YOLO 模型权重文件路径
 
     # 初始化
     auto_disable_animations: bool = True
@@ -323,6 +324,7 @@ def load_config() -> EngineConfig:
     env_overrides = {
         "AE_DEVICE_SERIAL": ("device", "serial", str),
         "AE_USE_AGENTLESS": ("device", "use_agentless", bool),
+        "AE_YOLO_MODEL_PATH": ("device", "yolo_model_path", str),
         "AE_TYPING_MODE": ("device", "typing_mode", str),
         "AE_OCR_ENDPOINT": ("ocr", "endpoint", str),
         "AE_MAX_DAILY_COMMENTS": ("risk_control", "max_daily_comments", int),

@@ -311,9 +311,11 @@ class InputTextAction(ActionProvider):
         self,
         driver: AgentlessMinitouchDriver,
         keyboard_vision: Optional[KeyboardVisionTyping],
+        config: Optional[EngineConfig] = None,
     ):
         self.driver = driver
         self.keyboard_vision = keyboard_vision
+        self.config = config
 
     def execute(self, spec, reco_result, anchors) -> bool:
         text = anchors.resolve(spec.text) if spec.text else None
@@ -321,7 +323,12 @@ class InputTextAction(ActionProvider):
             logger.error("InputTextAction: text 为空")
             return False
 
-        mode = spec.mode or "clipboard"
+        mode = spec.mode
+        if not mode:
+            if self.config and hasattr(self.config, "device") and hasattr(self.config.device, "typing_mode"):
+                mode = self.config.device.typing_mode
+            else:
+                mode = "clipboard"
         logger.info(f"InputTextAction: mode='{mode}', text='{text[:30]}...'")
 
         if mode == "vision":
@@ -756,7 +763,7 @@ class ActionRegistry:
             ActionType.DOUBLE_TAP: DoubleTapAction(driver),
             ActionType.SWIPE: SwipeAction(driver),
             ActionType.HUMAN_SWIPE: HumanSwipeAction(driver),
-            ActionType.INPUT_TEXT: InputTextAction(driver, keyboard_vision),
+            ActionType.INPUT_TEXT: InputTextAction(driver, keyboard_vision, config),
             ActionType.CLIPBOARD_INPUT: ClipboardInputAction(driver),
             ActionType.PRESS_BACK: PressBackAction(driver),
             ActionType.LAUNCH_APP: LaunchAppAction(driver),

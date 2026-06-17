@@ -20,7 +20,7 @@ class ImageRequest(BaseModel):
 class ConfigRequest(BaseModel):
     engine_type: str
     lang: str = "ch"
-    version: str = "PP-OCRv4"
+    version: str = "PP-OCRv6_tiny"
     # Future parameters for other engines can be added here
 
 # ---------------------------------------------------------
@@ -39,13 +39,27 @@ class BaseOCREngine(ABC):
 # Specific Implementation: PaddleOCR
 # ---------------------------------------------------------
 class PaddleOCREngine(BaseOCREngine):
-    def __init__(self, lang="ch", version="PP-OCRv4"):
+    def __init__(self, lang="ch", version="PP-OCRv6_tiny"):
         from paddleocr import PaddleOCR
         logging.getLogger("ppocr").setLevel(logging.ERROR)
         self.lang = lang
         self.version = version
         logger.info(f"Initializing PaddleOCR Engine... (lang: {lang}, version: {version})")
-        self.engine = PaddleOCR(lang=lang, ocr_version=version)
+        
+        if version == "PP-OCRv6_tiny":
+            self.engine = PaddleOCR(
+                lang=lang, 
+                text_detection_model_name='PP-OCRv6_tiny_det', 
+                text_recognition_model_name='PP-OCRv6_tiny_rec'
+            )
+        elif version == "PP-OCRv6_small":
+            self.engine = PaddleOCR(
+                lang=lang, 
+                text_detection_model_name='PP-OCRv6_small_det', 
+                text_recognition_model_name='PP-OCRv6_small_rec'
+            )
+        else:
+            self.engine = PaddleOCR(lang=lang, ocr_version=version)
         self._use_predict = hasattr(self.engine, 'predict')
         logger.info(f"PaddleOCR API: {'predict (v3.5+)' if self._use_predict else 'ocr (legacy)'}")
 
@@ -114,7 +128,7 @@ class OCREngineManager:
         # Initialize default engine
         default_type = os.getenv("OCR_ENGINE_TYPE", "paddle")
         default_lang = os.getenv("OCR_LANG", "ch")
-        default_version = os.getenv("OCR_VERSION", "PP-OCRv4")
+        default_version = os.getenv("OCR_VERSION", "PP-OCRv6_tiny")
         self.switch_engine(default_type, default_lang, default_version)
 
     def switch_engine(self, engine_type: str, lang: str, version: str):

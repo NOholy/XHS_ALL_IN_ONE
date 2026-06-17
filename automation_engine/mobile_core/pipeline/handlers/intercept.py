@@ -63,14 +63,7 @@ def _ocr_screen(screen, endpoint: str = "http://localhost:8001/ocr"):
     import base64
 
     try:
-        h, w = screen.shape[:2]
-        scale = 1.0
-        img = screen
-        if max(h, w) > 1600:
-            scale = 1600 / max(h, w)
-            img = cv2.resize(screen, (int(w * scale), int(h * scale)))
-
-        _, buf = cv2.imencode('.png', img)
+        _, buf = cv2.imencode('.png', screen)
         b64 = base64.b64encode(buf).decode()
 
         resp = requests.post(
@@ -101,10 +94,6 @@ def _ocr_screen(screen, endpoint: str = "http://localhost:8001/ocr"):
                     text, conf = txt_info, 0.0
                 else:
                     continue
-
-                # 坐标回映射到原始分辨率
-                if scale != 1.0:
-                    box = [[p[0] / scale, p[1] / scale] for p in box]
 
                 cx = int(sum(p[0] for p in box) / len(box))
                 cy = int(sum(p[1] for p in box) / len(box))

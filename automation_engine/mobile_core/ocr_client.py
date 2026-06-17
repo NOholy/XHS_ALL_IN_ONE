@@ -88,14 +88,6 @@ class OCRClient:
             os._exit(1)
 
         try:
-            # Resize image if it's too large to dramatically speed up CPU OCR
-            # Increased threshold to 1600 to retain precision for small UI elements (e.g. Reply button)
-            h, w = image_np.shape[:2]
-            scale = 1.0
-            if max(h, w) > 1600:
-                scale = 1600 / max(h, w)
-                image_np = cv2.resize(image_np, (int(w * scale), int(h * scale)))
-            
             _, buffer = cv2.imencode('.png', image_np)  # Use lossless PNG instead of lossy JPG-80 to preserve text edges
             img_b64 = base64.b64encode(buffer).decode('utf-8')
 
@@ -111,13 +103,6 @@ class OCRClient:
                 self._breaker.record_success()
                 results = data.get("results", [])
                 
-                # Scale boxes back to original resolution
-                if scale != 1.0:
-                    for i in range(len(results)):
-                        box, txt_info = results[i]
-                        new_box = [[p[0] / scale, p[1] / scale] for p in box]
-                        results[i] = [new_box, txt_info]
-                        
                 return results
             else:
                 self._breaker.record_failure()
