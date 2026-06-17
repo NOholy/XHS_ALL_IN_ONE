@@ -534,14 +534,14 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
 
 if __name__ == "__main__":
     import argparse
-    from mobile_core.agentless_driver import AgentlessMinitouchDriver
+    from mobile_core.agentless_driver import AgentlessTouchDriver
     from mobile_core.ocr_client import OCRClient
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--serial", type=str, default=None)
     args = parser.parse_args()
 
-    driver = AgentlessMinitouchDriver(args.serial)
+    driver = AgentlessTouchDriver(args.serial)
     ocr = OCRClient()
     
     automated_setup_pipeline(driver, ocr, serial=args.serial)

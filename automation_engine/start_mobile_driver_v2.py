@@ -23,7 +23,7 @@ logger = get_logger("main")
 
 def _build_driver(config):
     """根据配置构建设备驱动"""
-    from mobile_core.agentless_driver import AgentlessMinitouchDriver
+    from mobile_core.agentless_driver import AgentlessTouchDriver
     
     yolo_model_path = config.device.yolo_model_path
     if not yolo_model_path:
@@ -33,7 +33,7 @@ def _build_driver(config):
     if not os.path.exists(abs_yolo_path):
         raise FileNotFoundError(f"🚨 CRITICAL: YOLO model file not found at: {abs_yolo_path}")
 
-    driver = AgentlessMinitouchDriver(config.device.serial, yolo_model_path=abs_yolo_path)
+    driver = AgentlessTouchDriver(config.device.serial, yolo_model_path=abs_yolo_path)
     
     # 传递传感器配置
     if hasattr(config, "stealth") and hasattr(config.stealth, "sensor_mode"):

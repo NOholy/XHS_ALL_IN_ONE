@@ -325,9 +325,9 @@ adb shell ls /data/local/tmp/framework-ext.dex
 # 手动推送
 adb push mobile_core/injector/touch_injector.dex /data/local/tmp/framework-ext.dex
 
-# 检查 app_process 是否被占用
-adb shell ps | grep app_process
-adb shell killall app_process
+# 检查 SensorHalService 是否被占用
+adb shell ps | grep SensorHalService
+adb shell "ps | grep SensorHalService | awk '{print \$2}' | xargs kill -9"
 ```
 
 ### 问题 5: Stealth IME 不工作

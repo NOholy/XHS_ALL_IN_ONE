@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from mobile_core.vision import VisionEngine
     from mobile_core.ocr_client import OCRClient
     from mobile_core.page_detector import LightPageDetector
-    from mobile_core.agentless_driver import AgentlessMinitouchDriver
+    from mobile_core.agentless_driver import AgentlessTouchDriver
 
 logger = get_logger("recognition")
 
@@ -707,7 +707,7 @@ class YoloDetectProvider(RecognitionProvider):
 
     def __init__(
         self,
-        driver: Optional[AgentlessMinitouchDriver] = None,
+        driver: Optional[AgentlessTouchDriver] = None,
         ocr: Optional[OCRClient] = None,
     ):
         self._driver = driver
@@ -849,7 +849,7 @@ class RecognitionRegistry:
         vision: Optional[VisionEngine] = None,
         ocr: Optional[OCRClient] = None,
         page_detector: Optional[LightPageDetector] = None,
-        driver: Optional[AgentlessMinitouchDriver] = None,
+        driver: Optional[AgentlessTouchDriver] = None,
         config: Any = None,
     ):
         self._vision = vision

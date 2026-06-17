@@ -26,7 +26,7 @@ public class SensorHalService {
     private static Map<Integer, PointerCoords> activeCoords = new LinkedHashMap<>();
     private static Map<Integer, PointerProperties> activeProps = new LinkedHashMap<>();
     
-    // Minitouch buffers
+    // Touch buffers
     private static Map<Integer, PointerCoords> pendingCoords = new LinkedHashMap<>();
     private static Map<Integer, PointerProperties> pendingProps = new LinkedHashMap<>();
     private static Map<Integer, Boolean> pendingUp = new LinkedHashMap<>();

@@ -11,7 +11,7 @@ logger = get_logger("agent_loop")
 class AgentLoop:
     """
     借鉴 ApkClaw DefaultAgentService 的 Agent 循环。
-    保留现有 automation_engine 的 Minitouch 执行层和 Watchdog 安全层，
+    保留现有 automation_engine 的 AgentlessTouch 执行层和 Watchdog 安全层，
     将决策层从硬编码状态机替换为 LLM Function Calling。
     """
 

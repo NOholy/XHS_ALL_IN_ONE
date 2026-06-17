@@ -139,7 +139,7 @@ class PipelineExecutor:
                  config=None):
         """
         Args:
-            driver: AgentlessMinitouchDriver 或兼容驱动
+            driver: AgentlessTouchDriver 或兼容驱动
             recognition_registry: RecognitionRegistry 实例
             action_registry: ActionRegistry 实例
             config: EngineConfig (可选, 用于配额检查等)

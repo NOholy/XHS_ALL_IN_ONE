@@ -25,7 +25,7 @@ import sys
 import argparse
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from mobile_core.agentless_driver import AgentlessMinitouchDriver
+from mobile_core.agentless_driver import AgentlessTouchDriver
 from mobile_core.ocr_client import OCRClient
 from mobile_core.logger import get_logger
 from tools.auto_crop_templates import (
@@ -457,7 +457,7 @@ def main():
     if args.save and not args.preview:
         parser.error("--save 必须与 --preview 搭配使用")
 
-    driver = AgentlessMinitouchDriver(args.serial)
+    driver = AgentlessTouchDriver(args.serial)
     ocr = OCRClient()
     serial = args.serial or driver.serial or _auto_detect_serial()
 

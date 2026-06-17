@@ -6,7 +6,7 @@ Pipeline 动作系统 — Unified Action Provider (统一动作提供者)。
     每个 Provider 封装一种原子操作（点击、滑动、输入、导航等）。
 
 集成组件:
-    - AgentlessMinitouchDriver: 物理触控 (tap, swipe, double_tap, press_back)
+    - AgentlessTouchDriver: 物理触控 (tap, swipe, double_tap, press_back)
     - XHSNavigator: 页面导航 (go_home, go_search, go_profile, go_back)
     - KeyboardVisionTyping: 视觉拼音输入
     - DeviceOptimizer: 飞行模式 IP 轮换
@@ -34,7 +34,7 @@ from mobile_core.pipeline.models import (
 )
 
 if TYPE_CHECKING:
-    from mobile_core.agentless_driver import AgentlessMinitouchDriver
+    from mobile_core.agentless_driver import AgentlessTouchDriver
     from mobile_core.navigator import XHSNavigator
     from mobile_core.keyboard_vision import KeyboardVisionTyping
     from automation_engine.config import EngineConfig
@@ -183,7 +183,7 @@ class TapAction(ActionProvider):
     physical_tap 内部已包含 Fitts 定律噪声 (±15px)。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -204,7 +204,7 @@ class SafeTapAction(ActionProvider):
     自动兼容平台 UI 灰度测试。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -236,7 +236,7 @@ class DoubleTapAction(ActionProvider):
     调用 driver.physical_double_tap()，内部含 Fitts 噪声和两次点击间隔。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -259,7 +259,7 @@ class SwipeAction(ActionProvider):
     调用 driver.physical_swipe() (Cubic Bézier + Ease-Out 惯性)。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -286,7 +286,7 @@ class HumanSwipeAction(ActionProvider):
     调用 driver.human_swipe()，内含犹豫回滚概率 + 贝塞尔曲线。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -309,7 +309,7 @@ class InputTextAction(ActionProvider):
 
     def __init__(
         self,
-        driver: AgentlessMinitouchDriver,
+        driver: AgentlessTouchDriver,
         keyboard_vision: Optional[KeyboardVisionTyping],
         config: Optional[EngineConfig] = None,
     ):
@@ -364,7 +364,7 @@ class ClipboardInputAction(ActionProvider):
     通过 ADB broadcast 发送文本到 ADBKeyboard。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -396,7 +396,7 @@ class PressBackAction(ActionProvider):
     调用 driver.press_back()，内含 human_sleep 延迟。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -451,7 +451,7 @@ class LaunchAppAction(ActionProvider):
     调用 driver.ensure_app_foreground()，默认包名 com.xingin.xhs。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -469,7 +469,7 @@ class StopAppAction(ActionProvider):
     通过 ADB force-stop 强制停止应用。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -494,7 +494,7 @@ class IpRotateAction(ActionProvider):
     延迟加载 DeviceOptimizer 并调用 toggle_airplane_mode()。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
         self._optimizer = None
 
@@ -611,7 +611,7 @@ class WaitAction(ActionProvider):
     使用 driver.human_sleep 添加正态分布抖动。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -641,7 +641,7 @@ class ScreencapSaveAction(ActionProvider):
     调用 driver.screenshot() 后保存到 spec.filename 指定路径。
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -680,7 +680,7 @@ class CustomAction(ActionProvider):
         def handler(driver, spec, reco_result, anchors, **params) -> bool
     """
 
-    def __init__(self, driver: AgentlessMinitouchDriver):
+    def __init__(self, driver: AgentlessTouchDriver):
         self.driver = driver
 
     def execute(self, spec, reco_result, anchors) -> bool:
@@ -736,7 +736,7 @@ class ActionRegistry:
 
     def __init__(
         self,
-        driver: AgentlessMinitouchDriver,
+        driver: AgentlessTouchDriver,
         navigator: Optional[XHSNavigator] = None,
         keyboard_vision: Optional[KeyboardVisionTyping] = None,
         config: Optional[EngineConfig] = None,
@@ -745,7 +745,7 @@ class ActionRegistry:
         初始化动作注册表。
 
         Args:
-            driver:          AgentlessMinitouchDriver 实例 (必需)
+            driver:          AgentlessTouchDriver 实例 (必需)
             navigator:       XHSNavigator 实例 (可选，NavigateAction 需要)
             keyboard_vision: KeyboardVisionTyping 实例 (可选，InputText vision 模式需要)
             config:          EngineConfig 实例 (可选，LlmGenerateAction 需要)

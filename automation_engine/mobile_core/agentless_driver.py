@@ -31,7 +31,7 @@ _INJECTOR_DEX_PATH = os.path.join(
 _INJECTOR_DEX_REMOTE = "/data/local/tmp/framework-ext.dex"  # V4: 伪装为系统扩展
 _INJECTOR_CLASS_NAME = "SensorHalService"  # V4: 进程名伪装为传感器服务
 
-class AgentlessMinitouchDriver:
+class AgentlessTouchDriver:
     """
     Phase 3: Agentless Driver.
     Uses 'app_process' 触控注入 via ADB port forwarding for high-speed, 
@@ -147,7 +147,7 @@ class AgentlessMinitouchDriver:
 
     # ─────────── Touch Injector Lifecycle ───────────
 
-    def ensure_minitouch(self):
+    def ensure_touch_injector(self):
         """
         Backward compatibility wrapper. Ensures 触控注入 is running.
         """
@@ -201,11 +201,27 @@ class AgentlessMinitouchDriver:
                 if not self._push_touch_injector():
                     return False
 
-            # Kill any existing injector process
-            subprocess.run(
-                self.adb_prefix + ["shell", "killall", "app_process"],
-                capture_output=True, timeout=3
-            )
+            # Kill any existing injector process precisely to avoid global pollution
+            # We search for the specific class name instead of killing all app_process
+            for ps_flag in ["-A", ""]:
+                ps_res = subprocess.run(
+                    self.adb_prefix + ["shell", f"ps {ps_flag}"],
+                    capture_output=True, text=True, timeout=3
+                )
+                if ps_res.returncode == 0 and "bad option" not in ps_res.stderr.lower():
+                    killed_any = False
+                    for line in ps_res.stdout.splitlines():
+                        if _INJECTOR_CLASS_NAME in line and "grep" not in line:
+                            parts = line.split()
+                            if len(parts) >= 2 and parts[1].isdigit():
+                                pid = parts[1]
+                                subprocess.run(
+                                    self.adb_prefix + ["shell", "kill", "-9", pid],
+                                    capture_output=True, timeout=3
+                                )
+                                killed_any = True
+                    if killed_any or ps_res.returncode == 0:
+                        break
             time.sleep(0.3)
 
             # V6: 设备端也使用随机端口
@@ -705,7 +721,7 @@ class AgentlessMinitouchDriver:
             Returns (None, 0.0) if not found.
         """
         if self._yolo_model is None:
-            logger.error("YOLO model is not initialized. Pass yolo_model_path to AgentlessMinitouchDriver.")
+            logger.error("YOLO model is not initialized. Pass yolo_model_path to AgentlessTouchDriver.")
             return None, 0.0
             
         img = screen_image if screen_image is not None else self.screenshot()

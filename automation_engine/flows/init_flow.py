@@ -67,27 +67,6 @@ class InitOrchestrator:
         adb_prefix = ["adb"] if not serial else ["adb", "-s", serial]
 
         # ═══════════════════════════════════════════
-        # Initialize Shared Components
-        # 避免在不同步骤中重复创建 driver，导致 minitouch 无法复用
-        # ═══════════════════════════════════════════
-        from mobile_core.vision import VisionEngine
-        from mobile_core.ocr_client import OCRClient
-        from mobile_core.watchdog import PopupWatchdog
-
-        from mobile_core.agentless_driver import AgentlessMinitouchDriver, PreconditionError
-        try:
-            driver = AgentlessMinitouchDriver(serial)
-        except PreconditionError as e:
-            logger.error(f"Driver initialization failed: {e}")
-            report["success"] = False
-            report["steps"]["stealth_ime"] = f"FAILED: {e}"
-            return report
-
-        ocr = OCRClient(self.config.ocr.endpoint)
-        vision = VisionEngine(self.config.vision.templates_dir)
-        watchdog = PopupWatchdog(vision, driver, ocr_client=ocr)
-
-        # ═══════════════════════════════════════════
         # Step 0: Pre-flight checks (OCR health)
         # ═══════════════════════════════════════════
         logger.info("[0/10] Pre-flight checks (OCR service)...")
@@ -113,6 +92,38 @@ class InitOrchestrator:
         # ═══════════════════════════════════════════
         logger.info("[1.5/10] Checking debug overlays...")
         self._check_debug_overlays(adb_prefix)
+
+        # ═══════════════════════════════════════════
+        # Step 3: 清理历史 U2 自动化残留 (Moved to execute before driver init)
+        # ═══════════════════════════════════════════
+        logger.info("[3/10] Cleaning up legacy U2 and IME residues...")
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.adbkeyboard"], capture_output=True, timeout=10)
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.github.nicekeyboard"], capture_output=True, timeout=10)
+        # W3: 自动卸载旧版的 Stealth IME (V2)
+        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.inputservice.core"], capture_output=True, timeout=10)
+        subprocess.run(adb_prefix + ["shell", "rm", "-f", "/data/local/tmp/u2.jar"], capture_output=True, timeout=10)
+        report["steps"]["cleanup_u2"] = "OK"
+
+        # ═══════════════════════════════════════════
+        # Initialize Shared Components
+        # 避免在不同步骤中重复创建 driver，导致底层 injector 无法复用
+        # ═══════════════════════════════════════════
+        from mobile_core.vision import VisionEngine
+        from mobile_core.ocr_client import OCRClient
+        from mobile_core.watchdog import PopupWatchdog
+
+        from mobile_core.agentless_driver import AgentlessTouchDriver, PreconditionError
+        try:
+            driver = AgentlessTouchDriver(serial)
+        except (PreconditionError, RuntimeError) as e:
+            logger.error(f"Driver initialization failed: {e}")
+            report["success"] = False
+            report["steps"]["driver_init"] = f"FAILED: {e}"
+            return report
+
+        ocr = OCRClient(self.config.ocr.endpoint)
+        vision = VisionEngine(self.config.vision.templates_dir)
+        watchdog = PopupWatchdog(vision, driver, ocr_client=ocr)
 
         # ═══════════════════════════════════════════
         # Step 2: 动态检测屏幕分辨率
@@ -153,16 +164,6 @@ class InitOrchestrator:
             report["steps"]["screen_resolution"] = "FALLBACK"
 
         # ═══════════════════════════════════════════
-        # Step 3: 清理历史 U2 自动化残留
-        # ═══════════════════════════════════════════
-        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.adbkeyboard"], capture_output=True, timeout=10)
-        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.github.nicekeyboard"], capture_output=True, timeout=10)
-        # W3: 自动卸载旧版的 Stealth IME (V2)
-        subprocess.run(adb_prefix + ["shell", "pm", "uninstall", "com.android.inputservice.core"], capture_output=True, timeout=10)
-        subprocess.run(adb_prefix + ["shell", "rm", "-f", "/data/local/tmp/u2.jar"], capture_output=True, timeout=10)
-        report["steps"]["cleanup_u2"] = "OK"
-
-        # ═══════════════════════════════════════════
         # Step 4: 触控注入 部署
         # ═══════════════════════════════════════════
         logger.info("[4/10] Deploying 触控注入 (app_process daemon)...")
@@ -193,35 +194,19 @@ class InitOrchestrator:
                     logger.warning("[4.5/10] ⚠️ sensor_strict=False — Continuing despite sensor failure. RISK: Touch-sensor mismatch detection active.")
             else:
                 logger.warning(f"[4.5/10] ⚠️ Sensor simulation explicitly set to 'off' in config. Touch-sensor data mismatch risk remains.")
-        # Step 4.6: Stealth IME — 全局激活（仅切换一次，进程退出时自动还原）
+        
+        # Step 4.6: Stealth IME — 状态确认与清理
         if hasattr(driver, "_ime_client") and driver._ime_client:
-            logger.info("[4.6/10] Checking Stealth IME installation...")
-            ime_installed = driver._ime_client.check_ime_installed()
-            report["steps"]["stealth_ime"] = "installed" if ime_installed else "not_installed"
-            if not ime_installed:
-                logger.critical("[4.6/10] 🚨 CRITICAL: Stealth IME is NOT installed on the device.")
-                logger.critical("This means the 'Invisible Keyboard' protection is missing, risking severe fraud detection.")
-                logger.critical("Aborting initialization. Please use stealth_ime_client to install it.")
-                raise RuntimeError("Precondition failed: Stealth IME is not installed.")
-            else:
-                # 全局激活：在整个自动化生命周期内保持 Stealth IME 为默认输入法。
-                # ensure_ime_active() 内部会自动：
-                #   1. 记录当前的系统原厂输入法（如搜狗/百度）
-                #   2. 切换为 Stealth IME
-                #   3. 注册 atexit + SIGINT/SIGTERM 钩子，保证进程退出时自动还原
-                ime_activated = driver._ime_client.ensure_ime_active()
-                if ime_activated:
-                    logger.info("[4.6/10] ✅ Stealth IME globally activated. Will auto-restore on process exit.")
-                    report["steps"]["stealth_ime"] = "globally_active"
-                    # W10: 清除 logcat 中的 InputMethodManagerService 痕迹
-                    subprocess.run(
-                        adb_prefix + ["logcat", "-c"],
-                        capture_output=True, timeout=5
-                    )
-                    logger.info("[W10] Logcat buffer cleared after IME activation.")
-                else:
-                    logger.critical("[4.6/10] 🚨 CRITICAL: Stealth IME is installed but failed to activate!")
-                    raise RuntimeError("Precondition failed: Stealth IME activation failed.")
+            logger.info("[4.6/10] Verifying Stealth IME activation status...")
+            # 因为 driver.__init__ 已经强制执行 ensure_ime_active() 否则会抛异常，这里我们只需确认即可
+            report["steps"]["stealth_ime"] = "globally_active"
+            
+            # W10: 清除 logcat 中的 InputMethodManagerService 痕迹
+            subprocess.run(
+                adb_prefix + ["logcat", "-c"],
+                capture_output=True, timeout=5
+            )
+            logger.info("[W10] Logcat buffer cleared after IME activation.")
         else:
             report["steps"]["stealth_ime"] = "N/A"
         # ═══════════════════════════════════════════
