@@ -8,6 +8,7 @@ and 'adb exec-out screencap' for vision.
 import time
 import random
 import socket
+import uuid
 import numpy as np
 import subprocess
 import cv2
@@ -224,20 +225,14 @@ class AgentlessTouchDriver:
                         break
             time.sleep(0.3)
 
-            # V6: 设备端也使用随机端口
-            device_port = random.randint(10000, 60000)
-            self._touch_port = self._find_free_port()
-
-            subprocess.run(
-                self.adb_prefix + ["forward", f"tcp:{self._touch_port}", f"tcp:{device_port}"],
-                capture_output=True, timeout=5
-            )
+            # Generate a unique Unix domain socket name for the device side
+            socket_name = f"touch_{uuid.uuid4().hex[:8]}"
 
             # V4: 使用伪装的类名和 dex 路径
             self._touch_process = subprocess.Popen(
                 self.adb_prefix + [
                     "shell",
-                    f"export CLASSPATH={_INJECTOR_DEX_REMOTE}; exec app_process /system/bin {_INJECTOR_CLASS_NAME} {self._screen_w} {self._screen_h} {device_port} {self._sensor_mode}"
+                    f"export CLASSPATH={_INJECTOR_DEX_REMOTE}; exec app_process /system/bin {_INJECTOR_CLASS_NAME} {self._screen_w} {self._screen_h} {socket_name} {self._sensor_mode}"
                 ],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
@@ -248,6 +243,19 @@ class AgentlessTouchDriver:
                 stderr = self._touch_process.stderr.read().decode("utf-8", errors="ignore")
                 logger.warning(f"Injector exited immediately. stderr: {stderr[:200]}")
                 return False
+
+            # Forward tcp:0 to localabstract to dynamically allocate a free local port on host
+            forward_res = subprocess.run(
+                self.adb_prefix + ["forward", "tcp:0", f"localabstract:{socket_name}"],
+                capture_output=True, text=True, timeout=5
+            )
+            if forward_res.returncode != 0:
+                logger.warning(f"Failed to forward socket: {forward_res.stderr}")
+                self._cleanup_touch_injector()
+                return False
+            
+            # Parse dynamically allocated port from standard output
+            self._touch_port = int(forward_res.stdout.strip())
 
             self._touch_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._touch_socket.settimeout(3.0)
@@ -334,11 +342,6 @@ class AgentlessTouchDriver:
             self._touch_available = False
         self._touch_available = False
 
-    def _find_free_port(self) -> int:
-        """Find a free TCP port on localhost."""
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("", 0))
-            return s.getsockname()[1]
 
     def _touch_send(self, cmd: str):
         """Send a command to touch injector socket."""

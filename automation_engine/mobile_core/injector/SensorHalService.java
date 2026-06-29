@@ -10,8 +10,8 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
-import java.net.ServerSocket;
-import java.net.Socket;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.LinkedHashMap;
@@ -42,14 +42,14 @@ public class SensorHalService {
     public static void main(String[] args) {
         int maxX = 1080;
         int maxY = 2400;
-        int port = 1111;
+        String socketName = "touch_injector";
         
         if (args.length >= 2) {
             maxX = Integer.parseInt(args[0]);
             maxY = Integer.parseInt(args[1]);
         }
         if (args.length >= 3) {
-            port = Integer.parseInt(args[2]);
+            socketName = args[2];
         }
         if (args.length >= 4) {
             sensorMode = args[3];
@@ -98,10 +98,10 @@ public class SensorHalService {
                 System.out.println("[SensorSim] Disabled (mode=off).");
             }
             
-            try (ServerSocket serverSocket = new ServerSocket(port)) {
-                System.out.println("Listening on port " + port);
+            try (LocalServerSocket serverSocket = new LocalServerSocket(socketName)) {
+                System.out.println("Listening on local socket " + socketName);
                 while (true) {
-                    Socket clientSocket = serverSocket.accept();
+                    LocalSocket clientSocket = serverSocket.accept();
                     handleClient(clientSocket, maxX, maxY);
                 }
             }
@@ -110,7 +110,7 @@ public class SensorHalService {
         }
     }
 
-    private static void handleClient(Socket socket, int maxX, int maxY) {
+    private static void handleClient(LocalSocket socket, int maxX, int maxY) {
         try {
             // Build banner with sensor status line
             String sensorLine = "";

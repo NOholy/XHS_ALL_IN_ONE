@@ -31,6 +31,7 @@ from mobile_core.logger import get_logger
 from tools.auto_crop_templates import (
     crop_and_save_via_ocr, _parse_ocr_results, _auto_detect_serial,
     crop_fixed_region, automated_setup_pipeline, verify_template_cross_check,
+    resolve_coordinate_for_screen,
 )
 
 logger = get_logger("assisted_crop")
@@ -89,15 +90,33 @@ def check_template_freshness(driver, serial=None):
 #   float  → OCR 裁切模式: 只匹配屏幕 y 位置 > 此比例的 OCR 结果
 #   tuple  → 固定坐标裁切模式: (left_ratio, top_ratio, right_ratio, bottom_ratio)
 TEMPLATE_REGISTRY = {
-    # ── 首页底部 Tab 栏 (固定坐标裁切，Tab 文字太小 OCR 不可靠) ──
-    "tab_home":       ("首页",     "底部导航栏 - 首页",           "在首页即可",                    (0.0, 0.92, 0.2, 1.0)),
-    "tab_profile":    ("我",       "底部导航栏 - 我",             "在首页即可",                    (0.8, 0.92, 1.0, 1.0)),
-    "tab_message":    ("消息",     "底部导航栏 - 消息",           "在首页即可",                    (0.6, 0.92, 0.8, 1.0)),
+    # ── 首页底部 Tab 栏 (固定坐标裁切，支持字典配置以适配特定分辨率绝对坐标，或兜底采用比例坐标) ──
+    "tab_home":       ("首页",     "底部导航栏 - 首页",           "在首页即可",                    {
+        "default": (0.0, 0.92, 0.2, 1.0),
+        "1080x2400": (0, 2220, 216, 2400),
+    }),
+    "tab_profile":    ("我",       "底部导航栏 - 我",             "在首页即可",                    {
+        "default": (0.8, 0.92, 1.0, 1.0),
+        "1080x2400": (864, 2220, 1080, 2400),
+    }),
+    "tab_message":    ("消息",     "底部导航栏 - 消息",           "在首页即可",                    {
+        "default": (0.6, 0.92, 0.8, 1.0),
+        "1080x2400": (648, 2220, 864, 2400),
+    }),
     # ── 首页顶部 (固定坐标裁切) ──
-    "search_input":   ("搜索",     "首页顶部搜索入口",            "在首页即可",                    (0.8, 0.03, 1.0, 0.1)),
-    "search_icon":    ("搜索",     "首页搜索图标(放大镜)",         "在首页即可",                    (0.88, 0.04, 0.98, 0.09)),
+    "search_input":   ("搜索",     "首页顶部搜索入口",            "在首页即可",                    {
+        "default": (0.8, 0.03, 1.0, 0.1),
+        "1080x2400": (864, 72, 1080, 240),
+    }),
+    "search_icon":    ("搜索",     "首页搜索图标(放大镜)",         "在首页即可",                    {
+        "default": (0.88, 0.04, 0.98, 0.09),
+        "1080x2400": (950, 96, 1058, 216),
+    }),
     # ── 导航辅助 (固定坐标裁切) ──
-    "close_button":   ("×",        "弹窗/页面左上角关闭按钮",      "打开任意弹窗或子页面",           (0.0, 0.01, 0.12, 0.07)),
+    "close_button":   ("×",        "弹窗/页面左上角关闭按钮",      "打开任意弹窗或子页面",           {
+        "default": (0.0, 0.01, 0.12, 0.07),
+        "1080x2400": (0, 24, 130, 168),
+    }),
     # ── 搜索页 (OCR 裁切) ──
     "search_button":  ("搜索",     "搜索页右侧提交按钮",          "点击搜索入口进入搜索页",          0.0),
     # ── 帖子详情页 (OCR 裁切) ──
@@ -253,26 +272,28 @@ def cmd_crop(driver, ocr, keyword, name, serial, exact, force):
     if name in TEMPLATE_REGISTRY:
         y_min_ratio = TEMPLATE_REGISTRY[name][3]
 
-    if isinstance(y_min_ratio, tuple):
+    # Resolve coordinate/ratio descriptor
+    img = driver.clean_screenshot()
+    h, w = img.shape[:2]
+    box = resolve_coordinate_for_screen(y_min_ratio, w, h)
+
+    if box is not None:
         # Fixed coordinate crop — keyword parameter is unused in this mode
         registered_keyword = TEMPLATE_REGISTRY.get(name, ("",))[0]
         if keyword != registered_keyword:
             print(f"\n💡 提示: 模板 '{name}' 使用固定坐标裁切，--keyword \"{keyword}\" 将被忽略，"
-                  f"实际裁切区域由注册表定义: {y_min_ratio}")
-        logger.info(f"使用固定坐标比例裁剪模板 '{name}' {y_min_ratio}...")
-        img = driver.clean_screenshot()
-        h, w = img.shape[:2]
-        left = int(w * y_min_ratio[0])
-        top = int(h * y_min_ratio[1])
-        right = int(w * y_min_ratio[2])
-        bottom = int(h * y_min_ratio[3])
-        box = (left, top, right, bottom)
+                  f"实际裁切区域为: {box}")
+        logger.info(f"使用固定坐标裁剪模板 '{name}' {box}...")
         success, path = crop_fixed_region(driver, name, serial, box)
     else:
-        logger.info(f"正在查找关键字 '{keyword}' 以裁剪模板 '{name}'（y_min_ratio={y_min_ratio}）...")
+        y_val = y_min_ratio
+        if isinstance(y_min_ratio, dict):
+            res_key = f"{w}x{h}"
+            y_val = y_min_ratio.get(res_key, y_min_ratio.get("default", 0.0))
+        logger.info(f"正在查找关键字 '{keyword}' 以裁剪模板 '{name}'（y_min_ratio={y_val}）...")
         success, path = crop_and_save_via_ocr(
             driver, ocr, keyword, name, serial,
-            exact_match=exact, y_min_ratio=y_min_ratio
+            exact_match=exact, y_min_ratio=y_val
         )
 
     if success:

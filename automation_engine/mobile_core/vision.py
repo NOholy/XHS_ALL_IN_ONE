@@ -14,6 +14,8 @@ class VisionEngine:
 
     def _load_templates(self):
         """Load templates from device-specific dir, then fill gaps from shared dir."""
+        self.templates.clear()  # Clear cache to avoid memory leak or dirty cache on reload
+        
         # 1. Load from device-specific directory
         if os.path.exists(self.templates_dir):
             for file in os.listdir(self.templates_dir):
@@ -45,8 +47,20 @@ class VisionEngine:
             return None
 
         template = self.templates[template_name]
-        gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
         
+        # Grayscale channel check
+        if len(screen_img.shape) == 3:
+            gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray_screen = screen_img
+
+        # Size check to prevent C++ level crash in matchTemplate
+        if template.shape[0] > gray_screen.shape[0] or template.shape[1] > gray_screen.shape[1]:
+            logger.warning(
+                f"Template '{template_name}' size {template.shape} is larger than screen size {gray_screen.shape}."
+            )
+            return None
+
         res = cv2.matchTemplate(gray_screen, template, cv2.TM_CCOEFF_NORMED)
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
         
@@ -63,8 +77,20 @@ class VisionEngine:
             return []
 
         template = self.templates[template_name]
-        gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
         
+        # Grayscale channel check
+        if len(screen_img.shape) == 3:
+            gray_screen = cv2.cvtColor(screen_img, cv2.COLOR_BGR2GRAY)
+        else:
+            gray_screen = screen_img
+
+        # Size check to prevent C++ level crash in matchTemplate
+        if template.shape[0] > gray_screen.shape[0] or template.shape[1] > gray_screen.shape[1]:
+            logger.warning(
+                f"Template '{template_name}' size {template.shape} is larger than screen size {gray_screen.shape}."
+            )
+            return []
+
         res = cv2.matchTemplate(gray_screen, template, cv2.TM_CCOEFF_NORMED)
         loc = np.where(res >= threshold)
         

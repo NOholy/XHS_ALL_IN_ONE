@@ -55,6 +55,141 @@ def _parse_ocr_results(results):
     return parsed
 
 
+def resolve_coordinate_for_screen(val, w_screen, h_screen):
+    """
+    Resolves a coordinate/ratio descriptor to absolute pixel box (left, top, right, bottom).
+    val can be:
+      - a tuple of 4 floats: e.g. (0.0, 0.92, 0.2, 1.0) -> relative ratios
+      - a tuple of 4 ints: e.g. (0, 2220, 216, 2400) -> absolute pixels
+      - a dictionary mapping resolution_str (e.g. "1080x2400") to absolute pixel/ratio box, with optional "default" fallback.
+      - a float/int (for OCR y_min_ratio). In this case we return None.
+    """
+    if isinstance(val, dict):
+        res_key = f"{w_screen}x{h_screen}"
+        if res_key in val:
+            val = val[res_key]
+        elif "default" in val:
+            val = val["default"]
+        else:
+            return None
+
+    if isinstance(val, tuple) and len(val) == 4:
+        is_ratio = True
+        for x in val:
+            if isinstance(x, int) and x > 1:
+                is_ratio = False
+                break
+        
+        if is_ratio:
+            return [int(w_screen * val[0]), int(h_screen * val[1]),
+                    int(w_screen * val[2]), int(h_screen * val[3])]
+        else:
+            return [int(val[0]), int(val[1]), int(val[2]), int(val[3])]
+
+    return None
+
+
+def locate_bottom_tab_dynamic(driver, ocr_client, keyword, x_min_ratio, x_max_ratio):
+    """
+    Dynamically locate a bottom tab by:
+    1. Screenshot.
+    2. Crop the bottom 12% of the screen.
+    3. Upscale the cropped image by 2x to make small text easily readable by OCR.
+    4. Run OCR and find the keyword closest to the target X-range.
+    5. Translate coordinates back to screen pixels.
+    Returns [left, top, right, bottom] or None if not found.
+    """
+    try:
+        img = driver.clean_screenshot()
+        h, w = img.shape[:2]
+        
+        # Crop bottom 12%
+        crop_top = int(h * 0.88)
+        bottom_strip = img[crop_top:h, 0:w]
+        
+        # Upscale by 2x
+        upscaled = cv2.resize(bottom_strip, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        
+        # Run OCR
+        results = ocr_client.ocr_image(upscaled)
+        parsed = _parse_ocr_results(results)
+        
+        best_box = None
+        for box, text, conf in parsed:
+            if keyword in text:
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                
+                # Convert back to original scale (divide by 2)
+                left = int(min(xs) / 2.0)
+                right = int(max(xs) / 2.0)
+                top = int(min(ys) / 2.0) + crop_top
+                bottom = int(max(ys) / 2.0) + crop_top
+                
+                # Check X-range spatial constraint
+                x_center_ratio = ((left + right) / 2.0) / w
+                if x_min_ratio <= x_center_ratio <= x_max_ratio:
+                    padding_x = int(w * 0.015)
+                    padding_y = int(h * 0.005)
+                    left = max(0, left - padding_x)
+                    right = min(w, right + padding_x)
+                    top = max(0, top - padding_y)
+                    bottom = min(h, bottom + padding_y)
+                    best_box = [left, top, right, bottom]
+                    break
+        
+        if best_box:
+            logger.info(f"Dynamic OCR successfully located tab '{keyword}' at {best_box}")
+            return best_box
+    except Exception as e:
+        logger.warning(f"Dynamic bottom tab location failed for '{keyword}': {e}")
+    
+    return None
+
+
+def locate_top_search_dynamic(driver, ocr_client):
+    """
+    Dynamically locate the search input box at the top of the screen.
+    """
+    try:
+        img = driver.clean_screenshot()
+        h, w = img.shape[:2]
+        
+        # Crop top 12%
+        crop_bottom = int(h * 0.12)
+        top_strip = img[0:crop_bottom, 0:w]
+        
+        # Upscale by 2x
+        upscaled = cv2.resize(top_strip, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        results = ocr_client.ocr_image(upscaled)
+        parsed = _parse_ocr_results(results)
+        
+        for box, text, conf in parsed:
+            if any(k in text for k in ["搜索", "输入", "大家都在", "发现", "🔍"]):
+                xs = [p[0] for p in box]
+                ys = [p[1] for p in box]
+                
+                left = int(min(xs) / 2.0)
+                right = int(max(xs) / 2.0)
+                top = int(min(ys) / 2.0)
+                bottom = int(max(ys) / 2.0)
+                
+                padding_x = int(w * 0.05)
+                padding_y = int(h * 0.005)
+                
+                left = max(0, left - padding_x)
+                right = min(w, right + padding_x)
+                top = max(0, top - padding_y)
+                bottom = min(crop_bottom, bottom + padding_y)
+                
+                box_res = [left, top, right, bottom]
+                logger.info(f"Dynamic OCR successfully located top search bar at {box_res}")
+                return box_res
+    except Exception as e:
+        logger.warning(f"Dynamic top search location failed: {e}")
+    return None
+
+
 def _validate_template(img, min_variance=50, min_size=15):
     """Validate that a template image contains meaningful visual content."""
     if img is None:
@@ -343,7 +478,24 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
             watchdog.check_and_handle()  # 拦截任意弹窗
             
             if fixed_box:
-                success, path = crop_fixed_region(driver, template_name, serial, fixed_box)
+                # Try dynamic OCR spatial resolution first for bottom tabs and search
+                dynamic_box = None
+                if template_name == "tab_home":
+                    dynamic_box = locate_bottom_tab_dynamic(driver, ocr_client, "首页", 0.00, 0.25)
+                elif template_name == "tab_message":
+                    dynamic_box = locate_bottom_tab_dynamic(driver, ocr_client, "消息", 0.50, 0.80)
+                elif template_name == "tab_profile":
+                    dynamic_box = locate_bottom_tab_dynamic(driver, ocr_client, "我", 0.75, 1.00)
+                elif template_name == "search_input":
+                    dynamic_box = locate_top_search_dynamic(driver, ocr_client)
+                
+                box_to_use = dynamic_box if dynamic_box else fixed_box
+                if dynamic_box:
+                    logger.info(f"Using dynamically located box for {template_name}: {box_to_use}")
+                else:
+                    logger.info(f"Dynamic location failed/N/A for {template_name}. Falling back to registry box: {box_to_use}")
+                
+                success, path = crop_fixed_region(driver, template_name, serial, box_to_use)
             else:
                 success, path = crop_and_save_via_ocr(
                     driver, ocr_client, ocr_query, template_name, serial, 
@@ -387,10 +539,7 @@ def automated_setup_pipeline(driver, ocr_client, serial=None, watchdog=None, **k
     def _registry_box(name):
         """从 TEMPLATE_REGISTRY 获取固定坐标 box (像素值)"""
         region = _REGISTRY[name][3]
-        if isinstance(region, tuple):
-            return [int(w_screen * region[0]), int(h_screen * region[1]),
-                    int(w_screen * region[2]), int(h_screen * region[3])]
-        return None
+        return resolve_coordinate_for_screen(region, w_screen, h_screen)
 
     # Capture 'tab_profile' (5th tab)
     attempt_crop_and_verify("tab_profile", "我", 0.88, ["编辑资料", "粉丝", "赞与收藏"], fixed_box=_registry_box("tab_profile"))

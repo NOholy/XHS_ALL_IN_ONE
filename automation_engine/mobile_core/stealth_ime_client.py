@@ -295,6 +295,101 @@ class StealthIMEClient:
 
         return self.check_ime_status()
 
+    def get_installed_ime_version(self) -> tuple:
+        """获取设备上已安装的 Stealth IME 的 (versionCode, versionName)。
+        如果未安装，返回 (None, None)。
+        """
+        try:
+            result = subprocess.run(
+                self.adb_prefix + ["shell", "dumpsys", "package", IME_PACKAGE],
+                capture_output=True, text=True, timeout=5
+            )
+            if result.returncode != 0:
+                return None, None
+
+            version_code = None
+            version_name = None
+            for line in result.stdout.splitlines():
+                line_str = line.strip()
+                if line_str.startswith("versionCode="):
+                    # e.g., "versionCode=1 minSdk=21 targetSdk=33"
+                    parts = line_str.split("versionCode=")
+                    if len(parts) >= 2:
+                        val = parts[1].split()[0]
+                        if val.isdigit():
+                            version_code = int(val)
+                elif line_str.startswith("versionName="):
+                    parts = line_str.split("versionName=")
+                    if len(parts) >= 2:
+                        version_name = parts[1].strip()
+            return version_code, version_name
+        except Exception as e:
+            logger.debug(f"Failed to check installed IME version: {e}")
+            return None, None
+
+    def get_local_source_version(self) -> tuple:
+        """从 local build.gradle 文件解析 versionCode 和 versionName。"""
+        import os
+        try:
+            gradle_path = os.path.abspath(os.path.join(
+                os.path.dirname(__file__), "..", "tools", "stealth_ime", "app", "build.gradle"
+            ))
+            if not os.path.exists(gradle_path):
+                return None, None
+
+            version_code = None
+            version_name = None
+            with open(gradle_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line_str = line.strip()
+                    if line_str.startswith("versionCode"):
+                        parts = line_str.split()
+                        if len(parts) >= 2:
+                            digits = "".join([c for c in parts[1] if c.isdigit()])
+                            if digits:
+                                version_code = int(digits)
+                    elif line_str.startswith("versionName"):
+                        parts = line_str.split('"')
+                        if len(parts) >= 3:
+                            version_name = parts[1]
+            return version_code, version_name
+        except Exception as e:
+            logger.debug(f"Failed to parse build.gradle version: {e}")
+            return None, None
+
+    def get_local_apk_version(self, apk_path: str) -> tuple:
+        """获取本地 APK 的 (versionCode, versionName)。优先使用 aapt，失败则解析 build.gradle。"""
+        import re
+        try:
+            # Check if aapt is available
+            res = subprocess.run(["aapt", "version"], capture_output=True, timeout=2)
+            if res.returncode == 0:
+                res_badging = subprocess.run(
+                    ["aapt", "dump", "badging", apk_path],
+                    capture_output=True, text=True, timeout=5
+                )
+                for line in res_badging.stdout.splitlines():
+                    if "package:" in line:
+                        vc_match = re.search(r"versionCode='(\d+)'", line)
+                        vn_match = re.search(r"versionName='([^']+)'", line)
+                        vc = int(vc_match.group(1)) if vc_match else None
+                        vn = vn_match.group(1) if vn_match else None
+                        return vc, vn
+        except Exception:
+            pass
+
+        # Fallback to source
+        return self.get_local_source_version()
+
+    def uninstall_ime(self) -> bool:
+        """卸载设备上的 Stealth IME。"""
+        logger.info(f"Uninstalling old Stealth IME: {IME_PACKAGE}")
+        result = subprocess.run(
+            self.adb_prefix + ["uninstall", IME_PACKAGE],
+            capture_output=True, text=True, timeout=15
+        )
+        return result.returncode == 0
+
     def get_current_ime(self) -> str:
         """获取当前系统默认的输入法。"""
         result = subprocess.run(
@@ -319,7 +414,28 @@ class StealthIMEClient:
         return is_active
 
     def ensure_ime_active(self) -> bool:
-        """确保 Stealth IME 是当前默认输入法。"""
+        """确保 Stealth IME 是当前默认输入法且版本最新。"""
+        import os
+        apk_path = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "tools", "stealth_ime", "app", "build", "outputs", "apk", "debug", "app-debug.apk"
+        ))
+
+        if os.path.exists(apk_path):
+            local_code, local_name = self.get_local_apk_version(apk_path)
+            installed_code, installed_name = self.get_installed_ime_version()
+
+            if installed_code is None:
+                logger.info("Stealth IME not installed on device. Installing...")
+                self.install_ime(apk_path)
+            elif local_code is not None and installed_code < local_code:
+                logger.info(f"Stealth IME is out of date (installed: {installed_code}, local: {local_code}). Upgrading...")
+                self.uninstall_ime()
+                self.install_ime(apk_path)
+            else:
+                logger.info(f"Stealth IME version check passed: installed={installed_code}, latest={local_code}")
+        else:
+            logger.warning(f"Local Stealth IME APK not found at {apk_path}. Skipping version check / installation.")
+
         current = self.get_current_ime()
         if current == IME_SERVICE:
             self._register_exit_hook()
